@@ -8,46 +8,46 @@ import hashlib
 # Page Configuration
 st.set_page_config(page_title="NIKA - Multi-Service & Tax Portal", layout="wide")
 
-# Custom Styling (Soft Red, Soft Blue, White & Pink Effect)
+# Custom Styling (Soft Orange, Ice Red & Clean Theme)
 st.markdown("""
     <style>
-    /* Main Background */
+    /* Main Background (Soft Orange & Ice Tone Gradient) */
     .main { 
-        background: linear-gradient(135deg, #f7f9fc 0%, #f0f4f8 100%); 
+        background: linear-gradient(135deg, #fff8f5 0%, #fff3ed 50%, #fce4ec 100%); 
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
     }
     
     /* Headings Styling */
     h1, h2, h3 { 
-        color: #b71c1c !important; 
+        color: #d84315 !important; 
         font-weight: 700;
     }
 
     /* Sidebar Styling */
     [data-testid="stSidebar"] {
         background-color: #ffffff;
-        border-right: 1px solid #e3e6ed;
+        border-right: 1px solid #ffe0b2;
     }
 
-    /* Buttons Styling (Red & Blue Gradient) */
+    /* Buttons Styling (Orange & Red Gradient) */
     .stButton>button {
-        background: linear-gradient(90deg, #d32f2f 0%, #1976d2 100%);
+        background: linear-gradient(90deg, #f4511e 0%, #d32f2f 100%);
         color: white; 
         border-radius: 8px; 
         border: none; 
         padding: 10px 24px; 
         font-weight: bold;
-        box-shadow: 0 4px 10px rgba(25, 118, 210, 0.2);
+        box-shadow: 0 4px 10px rgba(244, 81, 30, 0.25);
         transition: 0.3s;
     }
     .stButton>button:hover {
-        background: linear-gradient(90deg, #c62828 0%, #1565c0 100%);
-        box-shadow: 0 6px 14px rgba(25, 118, 210, 0.3);
+        background: linear-gradient(90deg, #e64a19 0%, #c62828 100%);
+        box-shadow: 0 6px 14px rgba(244, 81, 30, 0.35);
     }
 
     /* Link Buttons */
     .stLinkButton>a {
-        background: linear-gradient(90deg, #d32f2f 0%, #1976d2 100%) !important;
+        background: linear-gradient(90deg, #f4511e 0%, #d32f2f 100%) !important;
         color: white !important;
         border-radius: 8px !important;
         font-weight: bold !important;
@@ -55,16 +55,16 @@ st.markdown("""
 
     /* Input Fields Border Focus & Background */
     input, textarea, select {
-        border-color: #90caf9 !important;
+        border-color: #ffccbc !important;
         background-color: #ffffff !important;
         border-radius: 6px !important;
     }
 
-    /* Success / Info Boxes (Soft Red & Soft Blue Effect) */
+    /* Success / Info Boxes (Soft Orange & Ice Red Effect) */
     .stAlert {
-        background-color: #e3f2fd !important;
-        border: 1px solid #bbdefb !important;
-        color: #0d47a1 !important;
+        background-color: #fff3e0 !important;
+        border: 1px solid #ffccbc !important;
+        color: #bf360c !important;
         border-radius: 8px;
     }
     
@@ -76,13 +76,13 @@ st.markdown("""
         background-color: #ffffff;
         border-radius: 6px 6px 0px 0px;
         padding: 10px 16px;
-        color: #333333;
-        border: 1px solid #e0e0e0;
+        color: #4e342e;
+        border: 1px solid #ffe0b2;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #ffebee !important;
-        color: #b71c1c !important;
-        border-bottom: 2px solid #b71c1c !important;
+        background-color: #fbe9e7 !important;
+        color: #d84315 !important;
+        border-bottom: 2px solid #d84315 !important;
     }
     </style>
 """, unsafe_allow_html=True)
