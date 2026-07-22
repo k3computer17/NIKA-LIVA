@@ -29,7 +29,7 @@ def check_hashes(password, hashed_text):
         return hashed_text
     return False
 
-# Database Connection (वापस पुराना नाम ताकि पुराना डेटा सुरक्षित रहे)
+# Database Connection
 conn = sqlite3.connect('nika_clients_v2.db', check_same_thread=False)
 c = conn.cursor()
 
@@ -274,6 +274,7 @@ else:
     if st.session_state.user_role == "Admin":
         st.title("👨‍💼 Master Admin Control Center")
         menu = [
+            "⚙️ Manage Customers (Update / Delete)",
             "👥 Approve New Customers",
             "🛍️ Manage Services & Rates",
             "📦 View & Manage Customer Orders",
@@ -283,8 +284,91 @@ else:
         ]
         choice = st.sidebar.radio("Admin Menu", menu)
 
+        # 0. MANAGE CUSTOMERS (UPDATE / DELETE)
+        if choice == "⚙️ Manage Customers (Update / Delete)":
+            st.subheader("⚙️ कस्टमर आईडी और डेटा अपडेट या डिलीट करें")
+            
+            c.execute("SELECT id, name, unique_client_id, mobile FROM clients ORDER BY id DESC")
+            all_clients = c.fetchall()
+            
+            if not all_clients:
+                st.info("कोई कस्टमर डेटा उपलब्ध नहीं है।")
+            else:
+                c_dict = {f"[{r[2] if r[2] else 'NO ID'}] {r[1]} - Mob: {r[3]} (Db ID: {r[0]})": r[0] for r in all_clients}
+                selected_label = st.selectbox("कस्टमर चुनें जिन्हें अपडेट या डिलीट करना है:", list(c_dict.keys()))
+                sel_cid = c_dict[selected_label]
+
+                # Fetch Client Data
+                c.execute("SELECT unique_client_id, name, father_name, pan_number, mobile, address FROM clients WHERE id = ?", (sel_cid,))
+                c_data = c.fetchone()
+
+                # Fetch Associated User Account
+                c.execute("SELECT username FROM users WHERE client_id = ?", (sel_cid,))
+                u_data = c.fetchone()
+                current_username = u_data[0] if u_data else "No User Account"
+
+                st.markdown("---")
+                tab_update, tab_delete = st.tabs(["✏️ अपडेट करें (Update Profile)", "🗑️ डिलीट करें (Delete Customer)"])
+
+                with tab_update:
+                    st.write("### ✏️ कस्टमर प्रोफाइल और आईडी अपडेट करें")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        up_unique = st.text_input("Unique Client ID", value=c_data[0] if c_data[0] else "")
+                        up_name = st.text_input("Full Name", value=c_data[1] if c_data[1] else "")
+                        up_father = st.text_input("Father Name", value=c_data[2] if c_data[2] else "")
+                    with col2:
+                        up_mobile = st.text_input("Mobile Number", value=c_data[4] if c_data[4] else "")
+                        up_pan = st.text_input("PAN Number", value=c_data[3] if c_data[3] else "")
+                        up_address = st.text_area("Address", value=c_data[5] if c_data[5] else "")
+
+                    st.markdown("#### 🔑 यूजरनेम / पासवर्ड अपडेट (यदि बदलना हो)")
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        up_uname = st.text_input("User ID / Username", value=current_username)
+                    with col4:
+                        up_pass = st.text_input("New Password (खाली छोड़ें अगर नहीं बदलना)", type="password")
+
+                    if st.button("💾 अपडेट सहेजें (Save Changes)"):
+                        # Update Clients Table
+                        c.execute('''
+                            UPDATE clients 
+                            SET unique_client_id = ?, name = ?, father_name = ?, pan_number = ?, mobile = ?, address = ?
+                            WHERE id = ?
+                        ''', (up_unique.upper(), up_name, up_father, up_pan.upper(), up_mobile, up_address, sel_cid))
+                        
+                        # Update Users Table
+                        if current_username != "No User Account":
+                            if up_pass.strip():
+                                c.execute("UPDATE users SET username = ?, password = ? WHERE client_id = ?",
+                                          (up_uname, make_hashes(up_pass), sel_cid))
+                            else:
+                                c.execute("UPDATE users SET username = ? WHERE client_id = ?",
+                                          (up_uname, sel_cid))
+                        
+                        conn.commit()
+                        st.success("✅ कस्टमर की डिटेल्स और आईडी सफलतापूर्वक अपडेट कर दी गई हैं!")
+                        st.rerun()
+
+                with tab_delete:
+                    st.warning("⚠️ **सावधान!** डिलीट करने पर इस ग्राहक का संपूर्ण डेटा (ऑर्डर, लेजर, अकाउंट) हमेशा के लिए हट जाएगा।")
+                    confirm_del = st.checkbox(f"हाँ, मैं ग्राहक '{c_data[1]}' को हमेशा के लिए डिलीट करना चाहता/चाहती हूँ।")
+                    if st.button("🗑️ permanently Delete Customer"):
+                        if confirm_del:
+                            c.execute("DELETE FROM orders WHERE client_id = ?", (sel_cid,))
+                            c.execute("DELETE FROM payments WHERE client_id = ?", (sel_cid,))
+                            c.execute("DELETE FROM client_years WHERE client_id = ?", (sel_cid,))
+                            c.execute("DELETE FROM client_gst WHERE client_id = ?", (sel_cid,))
+                            c.execute("DELETE FROM users WHERE client_id = ?", (sel_cid,))
+                            c.execute("DELETE FROM clients WHERE id = ?", (sel_cid,))
+                            conn.commit()
+                            st.success("🗑️ कस्टमर को सफलता पूर्वक डिलीट कर दिया गया है!")
+                            st.rerun()
+                        else:
+                            st.error("कृपया पुष्टि (Checkbox) पर टिक करें!")
+
         # 1. Approve Customers
-        if choice == "👥 Approve New Customers":
+        elif choice == "👥 Approve New Customers":
             st.subheader("👥 Pending Customer Approvals")
             df_pend = pd.read_sql_query('''
                 SELECT u.id as 'User Table ID', c.unique_client_id as 'Unique ID', c.name as 'Name', u.username as 'Username', c.mobile as 'Mobile', c.address as 'Address'
