@@ -33,7 +33,7 @@ def check_hashes(password, hashed_text):
 conn = sqlite3.connect('nika_clients_v2.db', check_same_thread=False)
 c = conn.cursor()
 
-# ----------------- DATABASE TABLES SETUP -----------------
+# ----------------- DATABASE TABLES SETUP & MIGRATION -----------------
 c.execute('''
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +59,17 @@ c.execute('''
         created_date TEXT
     )
 ''')
+
+# Check & Add missing columns safely for old databases
+try:
+    c.execute("ALTER TABLE clients ADD COLUMN unique_client_id TEXT")
+except sqlite3.OperationalError:
+    pass # Column already exists
+
+try:
+    c.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 1")
+except sqlite3.OperationalError:
+    pass
 
 c.execute('''
     CREATE TABLE IF NOT EXISTS client_gst (
