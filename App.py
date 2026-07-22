@@ -31,7 +31,7 @@ def check_hashes(password, hashed_text):
     return False
 
 # Database Connection & Auto-Fix Schema Mismatch
-db_file = 'nika_clients_v2.db'
+db_file = 'nika_clients_v3.db'
 conn = sqlite3.connect(db_file, check_same_thread=False)
 c = conn.cursor()
 
