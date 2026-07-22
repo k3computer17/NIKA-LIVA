@@ -149,8 +149,9 @@ conn.commit()
 # ----------------- FUNCTIONS -----------------
 def generate_auto_client_id():
     c.execute("SELECT MAX(id) FROM clients")
-    last_id = c.fetchone()[0]
-    next_id = (last_id if last_id else 0) + 1001
+    res = c.fetchone()
+    last_id = res[0] if res and res[0] is not None else 0
+    next_id = last_id + 1001
     return f"NIKA-{next_id}"
 
 FY_LIST = ["2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026", "2026-2027"]
