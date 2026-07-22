@@ -123,31 +123,23 @@ c.execute('''
     )
 ''')
 
-# Check & Add missing columns safely for old databases
-try:
-    c.execute("ALTER TABLE clients ADD COLUMN unique_client_id TEXT")
-except sqlite3.OperationalError:
-    pass 
+# Robust Column Migration for Existing DBs
+def add_column_if_not_exists(cursor, table_name, column_definition):
+    col_name = column_definition.split()[0]
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    columns = [col[1] for col in cursor.fetchall()]
+    if col_name not in columns:
+        try:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_definition}")
+        except Exception:
+            pass
 
-try:
-    c.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 1")
-except sqlite3.OperationalError:
-    pass
-
-try:
-    c.execute("ALTER TABLE orders ADD COLUMN order_status TEXT DEFAULT 'Pending'")
-except sqlite3.OperationalError:
-    pass
-
-try:
-    c.execute("ALTER TABLE orders ADD COLUMN delivery_address TEXT")
-except sqlite3.OperationalError:
-    pass
-
-try:
-    c.execute("ALTER TABLE orders ADD COLUMN remarks TEXT")
-except sqlite3.OperationalError:
-    pass
+add_column_if_not_exists(c, "clients", "unique_client_id TEXT")
+add_column_if_not_exists(c, "users", "is_approved INTEGER DEFAULT 1")
+add_column_if_not_exists(c, "orders", "order_status TEXT DEFAULT 'Pending'")
+add_column_if_not_exists(c, "orders", "delivery_address TEXT")
+add_column_if_not_exists(c, "orders", "remarks TEXT")
+conn.commit()
 
 # Create Default Admin User if not exists
 c.execute("SELECT * FROM users WHERE username = 'admin'")
