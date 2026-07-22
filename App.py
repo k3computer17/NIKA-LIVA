@@ -64,7 +64,7 @@ c.execute('''
 try:
     c.execute("ALTER TABLE clients ADD COLUMN unique_client_id TEXT")
 except sqlite3.OperationalError:
-    pass # Column already exists
+    pass 
 
 try:
     c.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 1")
@@ -141,6 +141,13 @@ if not c.fetchone():
               ('admin', make_hashes('admin123'), 'Admin', 1))
 conn.commit()
 
+# ----------------- AUTO GENERATE CLIENT ID FUNCTION -----------------
+def generate_auto_client_id():
+    c.execute("SELECT MAX(id) FROM clients")
+    last_id = c.fetchone()[0]
+    next_id = (last_id if last_id else 0) + 1001
+    return f"NIKA-{next_id}"
+
 FY_LIST = ["2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026", "2026-2027"]
 MY_CONTACT = "8358013017"
 
@@ -216,6 +223,10 @@ if not st.session_state.logged_in:
     # 3. NEW CUSTOMER SELF-REGISTRATION
     elif login_choice == "📝 New Customer Self-Registration":
         st.subheader("📝 Self Register as New Customer")
+        
+        # Auto-generated ID
+        auto_id = generate_auto_client_id()
+        
         col1, col2 = st.columns(2)
         with col1:
             c_name = st.text_input("Full Name *")
@@ -223,7 +234,7 @@ if not st.session_state.logged_in:
             c_mobile = st.text_input("Mobile Number *")
             c_address = st.text_area("Delivery / Home Address *")
         with col2:
-            c_unique = st.text_input("Unique Client ID (यदि एडमिन ने दिया हो या अपना बनाएं) *")
+            c_unique = st.text_input("Unique Client ID (Auto-Generated) *", value=auto_id)
             c_userid = st.text_input("Create User ID / Username *")
             c_pass = st.text_input("Create Password *", type="password")
 
@@ -240,9 +251,9 @@ if not st.session_state.logged_in:
                     c.execute("INSERT INTO users (username, password, role, client_id, is_approved) VALUES (?, ?, 'Customer', ?, 0)",
                               (c_userid, make_hashes(c_pass), new_client_id))
                     conn.commit()
-                    st.success("✅ रजिस्ट्रेशन सफल हुआ! अब एडमिन से अप्रूवल के लिए नीचे दिए गए बटन पर क्लिक करें।")
+                    st.success(f"✅ रजिस्ट्रेशन सफल हुआ! आपकी यूनिक आईडी है: **{c_unique.upper()}**")
                     
-                    wa_text = f"नमस्ते एडमिन, मैंने पोर्टल पर नया रजिस्ट्रेशन किया है।\n\nनाम: {c_name}\nयूजर आईडी: {c_userid}\nयूनिक आईडी: {c_unique}\nमोबाइल: {c_mobile}\n\nकृपया मेरा अकाउंट अप्रूव करें।"
+                    wa_text = f"नमस्ते एडमिन, मैंने नया रजिस्ट्रेशन किया है।\n\nनाम: {c_name}\nयूजर आईडी: {c_userid}\nयूनिक आईडी: {c_unique.upper()}\nमोबाइल: {c_mobile}\n\nकृपया मेरा अकाउंट अप्रूव करें।"
                     st.link_button("💬 Send Approval SMS/WhatsApp to Admin", create_whatsapp_link(MY_CONTACT, wa_text))
                 except sqlite3.IntegrityError:
                     st.error("⚠️ यह Username पहले से मौजूद है। कृपया दूसरा चुनें।")
@@ -325,7 +336,7 @@ else:
                     st.write("### ✏️ कस्टमर प्रोफाइल और आईडी अपडेट करें")
                     col1, col2 = st.columns(2)
                     with col1:
-                        up_unique = st.text_input("Unique Client ID", value=c_data[0] if c_data[0] else "")
+                        up_unique = st.text_input("Unique Client ID", value=c_data[0] if c_data[0] else generate_auto_client_id())
                         up_name = st.text_input("Full Name", value=c_data[1] if c_data[1] else "")
                         up_father = st.text_input("Father Name", value=c_data[2] if c_data[2] else "")
                     with col2:
@@ -341,14 +352,12 @@ else:
                         up_pass = st.text_input("New Password (खाली छोड़ें अगर नहीं बदलना)", type="password")
 
                     if st.button("💾 अपडेट सहेजें (Save Changes)"):
-                        # Update Clients Table
                         c.execute('''
                             UPDATE clients 
                             SET unique_client_id = ?, name = ?, father_name = ?, pan_number = ?, mobile = ?, address = ?
                             WHERE id = ?
                         ''', (up_unique.upper(), up_name, up_father, up_pan.upper(), up_mobile, up_address, sel_cid))
                         
-                        # Update Users Table
                         if current_username != "No User Account":
                             if up_pass.strip():
                                 c.execute("UPDATE users SET username = ?, password = ? WHERE client_id = ?",
@@ -364,7 +373,7 @@ else:
                 with tab_delete:
                     st.warning("⚠️ **सावधान!** डिलीट करने पर इस ग्राहक का संपूर्ण डेटा (ऑर्डर, लेजर, अकाउंट) हमेशा के लिए हट जाएगा।")
                     confirm_del = st.checkbox(f"हाँ, मैं ग्राहक '{c_data[1]}' को हमेशा के लिए डिलीट करना चाहता/चाहती हूँ।")
-                    if st.button("🗑️ permanently Delete Customer"):
+                    if st.button("🗑️ Permanently Delete Customer"):
                         if confirm_del:
                             c.execute("DELETE FROM orders WHERE client_id = ?", (sel_cid,))
                             c.execute("DELETE FROM payments WHERE client_id = ?", (sel_cid,))
@@ -459,7 +468,7 @@ else:
             st.subheader("📝 Add Client Profile (Admin)")
             col1, col2 = st.columns(2)
             with col1:
-                u_id = st.text_input("Assign Unique Client ID *")
+                u_id = st.text_input("Assign Unique Client ID *", value=generate_auto_client_id())
                 name = st.text_input("Client Full Name *")
                 father = st.text_input("Father's Name")
                 mobile = st.text_input("Mobile Number *")
@@ -472,7 +481,7 @@ else:
                 c.execute("INSERT INTO clients (unique_client_id, name, father_name, pan_number, mobile, address, created_date) VALUES (?,?,?,?,?,?,?)",
                           (u_id.upper(), name, father, pan.upper(), mobile, address, today))
                 conn.commit()
-                st.success("Client Profile Saved Successfully!")
+                st.success(f"Client Profile Saved Successfully with ID: {u_id.upper()}")
 
         elif choice == "🔍 Client Ledger & Credentials":
             st.subheader("🔍 Client Statement & Master Ledger")
