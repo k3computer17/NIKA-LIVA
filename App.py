@@ -29,8 +29,8 @@ def check_hashes(password, hashed_text):
         return hashed_text
     return False
 
-# Database Connection
-conn = sqlite3.connect('nika_clients_v3.db', check_same_thread=False)
+# Database Connection (वापस पुराना नाम ताकि पुराना डेटा सुरक्षित रहे)
+conn = sqlite3.connect('nika_clients_v2.db', check_same_thread=False)
 c = conn.cursor()
 
 # ----------------- DATABASE TABLES SETUP -----------------
@@ -41,14 +41,14 @@ c.execute('''
         password TEXT,
         role TEXT,
         client_id INTEGER,
-        is_approved INTEGER DEFAULT 0
+        is_approved INTEGER DEFAULT 1
     )
 ''')
 
 c.execute('''
     CREATE TABLE IF NOT EXISTS clients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        unique_client_id TEXT UNIQUE,
+        unique_client_id TEXT,
         name TEXT,
         father_name TEXT,
         pan_number TEXT,
@@ -226,7 +226,6 @@ if not st.session_state.logged_in:
                               (c_unique.upper(), c_name, c_father, c_mobile, c_address, today))
                     new_client_id = c.lastrowid
                     
-                    # is_approved = 0 (Admin approval required)
                     c.execute("INSERT INTO users (username, password, role, client_id, is_approved) VALUES (?, ?, 'Customer', ?, 0)",
                               (c_userid, make_hashes(c_pass), new_client_id))
                     conn.commit()
@@ -235,7 +234,7 @@ if not st.session_state.logged_in:
                     wa_text = f"नमस्ते एडमिन, मैंने पोर्टल पर नया रजिस्ट्रेशन किया है।\n\nनाम: {c_name}\nयूजर आईडी: {c_userid}\nयूनिक आईडी: {c_unique}\nमोबाइल: {c_mobile}\n\nकृपया मेरा अकाउंट अप्रूव करें।"
                     st.link_button("💬 Send Approval SMS/WhatsApp to Admin", create_whatsapp_link(MY_CONTACT, wa_text))
                 except sqlite3.IntegrityError:
-                    st.error("⚠️ यह Username या Unique ID पहले से मौजूद है। कृपया दूसरा चुनें।")
+                    st.error("⚠️ यह Username पहले से मौजूद है। कृपया दूसरा चुनें।")
 
     # 4. FORGOT PASSWORD
     elif login_choice == "🔄 Forgot Password / Reset":
@@ -253,7 +252,7 @@ if not st.session_state.logged_in:
                 WHERE u.username = ? AND u.role = 'Customer'
             ''', (f_user,))
             r = c.fetchone()
-            if r and r[1] == f_mobile and r[2].upper() == f_unique.upper():
+            if r and r[1] == f_mobile and str(r[2]).upper() == f_unique.upper():
                 c.execute("UPDATE users SET password = ? WHERE username = ?", (make_hashes(new_pass), f_user))
                 conn.commit()
                 st.success("✅ पासवर्ड सफलतापूर्वक बदल दिया गया है! अब आप 'Customer Login' से लॉगिन कर सकते हैं।")
@@ -375,13 +374,35 @@ else:
 
             if st.button("Save Client Profile"):
                 today = datetime.now().strftime("%Y-%m-%d")
-                try:
-                    c.execute("INSERT INTO clients (unique_client_id, name, father_name, pan_number, mobile, address, created_date) VALUES (?,?,?,?,?,?,?)",
-                              (u_id.upper(), name, father, pan.upper(), mobile, address, today))
-                    conn.commit()
-                    st.success("Client Profile Saved Successfully!")
-                except sqlite3.IntegrityError:
-                    st.error("Unique Client ID already exists!")
+                c.execute("INSERT INTO clients (unique_client_id, name, father_name, pan_number, mobile, address, created_date) VALUES (?,?,?,?,?,?,?)",
+                          (u_id.upper(), name, father, pan.upper(), mobile, address, today))
+                conn.commit()
+                st.success("Client Profile Saved Successfully!")
+
+        elif choice == "🔍 Client Ledger & Credentials":
+            st.subheader("🔍 Client Statement & Master Ledger")
+            c.execute("SELECT id, name, unique_client_id, mobile FROM clients ORDER BY name ASC")
+            clients = c.fetchall()
+            if clients:
+                opts = {f"{r[1]} | ID: {r[2]} | Mob: {r[3]}": r[0] for r in clients}
+                sel = st.selectbox("Select Client:", list(opts.keys()))
+                cid = opts[sel]
+
+                fy = st.selectbox("Select Financial Year:", FY_LIST, index=4)
+                c.execute("SELECT annual_fee FROM client_years WHERE client_id = ? AND financial_year = ?", (cid, fy))
+                fee_r = c.fetchone()
+                fee = fee_r[0] if fee_r else 0.0
+
+                df_p = pd.read_sql_query("SELECT payment_date as Date, amount_paid as Paid, payment_mode as Mode, remarks as Remarks FROM payments WHERE client_id = ? AND financial_year = ?", conn, params=(cid, fy))
+                tot_p = df_p['Paid'].sum() if not df_p.empty else 0.0
+                due = fee - tot_p
+
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Fee", f"₹{fee}")
+                m2.metric("Received", f"₹{tot_p}")
+                m3.metric("Due", f"₹{due}")
+
+                st.dataframe(df_p)
 
         elif choice == "📊 Overall Business Report":
             st.subheader("📊 Business Report")
@@ -396,7 +417,8 @@ else:
         c.execute("SELECT unique_client_id, name, pan_number, mobile, address FROM clients WHERE id = ?", (cid,))
         client_info = c.fetchone()
 
-        st.info(f"👤 **{client_info[1]}** | 🆔 **ID:** `{client_info[0]}` | 📱 **Mobile:** {client_info[3]}")
+        c_uid = client_info[0] if client_info[0] else "N/A"
+        st.info(f"👤 **{client_info[1]}** | 🆔 **ID:** `{c_uid}` | 📱 **Mobile:** {client_info[3]}")
 
         tab_order, tab_cart, tab_my_orders, tab_ledger = st.tabs([
             "🛒 Browse & Add Items", 
@@ -451,7 +473,6 @@ else:
                 note = st.text_input("विशेष निर्देश (Special Note):")
 
                 if st.button("🚀 आर्डर फाइनल करें (Place Final Order & Bill)"):
-                    # Create summary string
                     summary_str = ", ".join([f"{i['name']} (x{i['qty']})" for i in st.session_state.cart])
                     today_dt = datetime.now().strftime("%Y-%m-%d %H:%M")
                     
@@ -461,15 +482,14 @@ else:
                     ''', (cid, summary_str, grand_total, today_dt, del_addr, note))
                     conn.commit()
                     
-                    st.success("🎉 आपका ऑर्डर सफलतापूर्वक दर्ज हो गया है! नीचे दिए गए बिल को व्हाट्सएप पर भेजें।")
+                    st.success("🎉 आपका ऑर्डर सफलतापूर्वक दर्ज हो गया है!")
                     
-                    # Bill view formatting
-                    bill_msg = f"🧾 *NIKA STORE - OFFICIAL BILL* 🧾\n\n👤 कस्टमर: {client_info[1]} (ID: {client_info[0]})\n📱 मोबाइल: {client_info[3]}\n\n*सामान सूची:*\n{summary_str}\n\n💰 *कुल योग: ₹{grand_total:,.2f}*\n🏠 पता: {del_addr}\n\nधन्यवाद!"
+                    bill_msg = f"🧾 *NIKA STORE - OFFICIAL BILL* 🧾\n\n👤 कस्टमर: {client_info[1]} (ID: {c_uid})\n📱 मोबाइल: {client_info[3]}\n\n*सामान सूची:*\n{summary_str}\n\n💰 *कुल योग: ₹{grand_total:,.2f}*\n🏠 पता: {del_addr}\n\nधन्यवाद!"
                     
                     st.markdown(f"""
                     <div class="bill-box">
                         <h3>🧾 डिजिटल बिल (Invoice)</h3>
-                        <p><b>कस्टमर:</b> {client_info[1]} ({client_info[0]})</p>
+                        <p><b>कस्टमर:</b> {client_info[1]} ({c_uid})</p>
                         <p><b>आइटम्स:</b> {summary_str}</p>
                         <hr>
                         <h3><b>कुल भुगतान राशि: ₹{grand_total:,.2f}</b></h3>
@@ -479,7 +499,6 @@ else:
                     wa_link = create_whatsapp_link(MY_CONTACT, bill_msg)
                     st.link_button("💬 व्हाट्सएप पर बिल और ऑर्डर भेजें", wa_link, use_container_width=True)
                     
-                    # Clear cart after order
                     st.session_state.cart = []
             else:
                 st.info("🛒 आपकी कार्ट खाली है। कृपया 'Browse & Add Items' से सामान चुनें।")
