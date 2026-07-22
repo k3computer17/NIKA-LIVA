@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import urllib.parse
 import hashlib
+import os
 
 # Page Configuration
 st.set_page_config(page_title="NIKA - Multi-Service & Tax Portal", layout="wide")
@@ -29,8 +30,9 @@ def check_hashes(password, hashed_text):
         return hashed_text
     return False
 
-# Database Connection
-conn = sqlite3.connect('nika_clients_v2.db', check_same_thread=False)
+# Database Connection & Auto-Fix Schema Mismatch
+db_file = 'nika_clients_v2.db'
+conn = sqlite3.connect(db_file, check_same_thread=False)
 c = conn.cursor()
 
 # ----------------- DATABASE TABLES SETUP -----------------
@@ -109,6 +111,13 @@ c.execute('''
     )
 ''')
 
+# Check and fix orders table schema automatically if columns are missing
+try:
+    c.execute("SELECT order_status FROM orders LIMIT 1")
+except sqlite3.OperationalError:
+    # अगर पुराना टेबल है जिसमें order_status नहीं है, तो उसे रीक्रिएट कर देगा
+    c.execute("DROP TABLE IF EXISTS orders")
+
 c.execute('''
     CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,20 +131,7 @@ c.execute('''
         FOREIGN KEY(client_id) REFERENCES clients(id)
     )
 ''')
-
-# --- FORCED COLUMN MIGRATION FOR EXISTING DATABASES ---
-def safe_add_column(table, column_def):
-    try:
-        c.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
-        conn.commit()
-    except Exception:
-        pass # कॉलम पहले से मौजूद होने पर इग्नोर करेगा
-
-safe_add_column("clients", "unique_client_id TEXT")
-safe_add_column("users", "is_approved INTEGER DEFAULT 1")
-safe_add_column("orders", "order_status TEXT DEFAULT 'Pending'")
-safe_add_column("orders", "delivery_address TEXT")
-safe_add_column("orders", "remarks TEXT")
+conn.commit()
 
 # Create Default Admin User if not exists
 c.execute("SELECT * FROM users WHERE username = 'admin'")
@@ -144,7 +140,7 @@ if not c.fetchone():
               ('admin', make_hashes('admin123'), 'Admin', 1))
 conn.commit()
 
-# ----------------- AUTO GENERATE CLIENT ID FUNCTION -----------------
+# ----------------- FUNCTIONS -----------------
 def generate_auto_client_id():
     c.execute("SELECT MAX(id) FROM clients")
     last_id = c.fetchone()[0]
@@ -206,7 +202,7 @@ if not st.session_state.logged_in:
             res = c.fetchone()
             if res:
                 if res[2] == 0:
-                    st.warning("⚠️ आपका अकाउंट अभी एडमिन द्वारा अप्रूव नहीं किया गया है। कृपया व्हाट्सएप पर एडमिन से संपर्क करें।")
+                    st.warning("⚠️ आपका अकाउंट अभी एडमिन द्वारा अप्रूव नहीं किया गया है।")
                     w_msg = f"नमस्ते एडमिन, मैंने नया रजिस्ट्रेशन किया है। कृपया मेरा यूजर आईडी ({user}) अप्रूव कर दें।"
                     st.link_button("💬 Send Approval Request on WhatsApp", create_whatsapp_link(MY_CONTACT, w_msg))
                 elif check_hashes(passwd, res[0]):
@@ -296,8 +292,6 @@ else:
             "👥 Approve New Customers",
             "🛍️ Manage Services & Rates",
             "📦 View & Manage Customer Orders",
-            "➕ Add New Client Profile", 
-            "🔍 Client Ledger & Credentials", 
             "📊 Overall Business Report"
         ]
         choice = st.sidebar.radio("Admin Menu", menu)
@@ -316,9 +310,6 @@ else:
 
                 c.execute("SELECT unique_client_id, name, father_name, pan_number, mobile, address FROM clients WHERE id = ?", (sel_cid,))
                 c_data = c.fetchone()
-                c.execute("SELECT username FROM users WHERE client_id = ?", (sel_cid,))
-                u_data = c.fetchone()
-                current_username = u_data[0] if u_data else "No User Account"
 
                 tab_update, tab_delete = st.tabs(["✏️ अपडेट करें", "🗑️ डिलीट करें"])
                 with tab_update:
