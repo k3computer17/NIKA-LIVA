@@ -60,7 +60,7 @@ st.markdown("""
         border-radius: 6px !important;
     }
 
-    /* Success / Info Boxes (Soft Orange & Ice Red Effect) */
+    /* Success / Info Boxes */
     .stAlert {
         background-color: #fff3e0 !important;
         border: 1px solid #ffccbc !important;
@@ -95,7 +95,7 @@ def check_hashes(password, hashed_text):
         return hashed_text
     return False
 
-# Database Connection (पुराना v2 डेटाबेस ताकि डेटा सुरक्षित रहे)
+# Database Connection
 db_file = 'nika_clients_v2.db'
 conn = sqlite3.connect(db_file, check_same_thread=False)
 c = conn.cursor()
@@ -191,7 +191,7 @@ c.execute('''
 ''')
 conn.commit()
 
-# --- SAFE MIGRATION: बिना पुराना डेटा डिलीट किए नए कॉलम जोड़ें ---
+# --- SAFE MIGRATION ---
 def add_column_safe(table_name, column_name, column_definition):
     try:
         c.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
@@ -220,7 +220,6 @@ def generate_auto_client_id():
     next_id = last_id + 1001
     return f"NIKA-{next_id}"
 
-FY_LIST = ["2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026", "2026-2027"]
 MY_CONTACT = "8358013017"
 
 def create_whatsapp_link(client_mobile, message):
@@ -247,14 +246,16 @@ if "cart" not in st.session_state:
 # ================= LOGIN, SIGNUP & FORGOT PORTAL =================
 if not st.session_state.logged_in:
     st.title("🏢 NIKA Multi-Service & Tax Portal")
-    login_menu = ["🔐 Admin Login", "👤 Customer Login", "📝 New Customer Self-Registration", "🔄 Forgot Password / Reset"]
-    login_choice = st.sidebar.selectbox("Navigation", login_menu)
+    
+    # Icons options for Login menu
+    login_menu = ["🔐 Admin Login", "👤 Customer Login", "📝 New Registration", "🔄 Reset Password"]
+    login_choice = st.sidebar.selectbox("📌 Navigation", login_menu)
 
     if login_choice == "🔐 Admin Login":
         st.subheader("👨‍💼 Master Admin Login")
-        user = st.text_input("Admin Username")
-        passwd = st.text_input("Admin Password", type="password")
-        if st.button("Master Login"):
+        user = st.text_input("👤 Admin Username")
+        passwd = st.text_input("🔑 Admin Password", type="password")
+        if st.button("🚀 Master Login"):
             c.execute("SELECT password FROM users WHERE username = ? AND role = 'Admin'", (user,))
             res = c.fetchone()
             if res and check_hashes(passwd, res[0]):
@@ -268,9 +269,9 @@ if not st.session_state.logged_in:
 
     elif login_choice == "👤 Customer Login":
         st.subheader("👤 Customer Portal Login")
-        user = st.text_input("User ID / Username")
-        passwd = st.text_input("Password", type="password")
-        if st.button("Customer Login"):
+        user = st.text_input("🆔 User ID / Username")
+        passwd = st.text_input("🔑 Password", type="password")
+        if st.button("🚀 Customer Login"):
             c.execute("SELECT password, client_id, is_approved FROM users WHERE username = ? AND role = 'Customer'", (user,))
             res = c.fetchone()
             if res:
@@ -290,22 +291,22 @@ if not st.session_state.logged_in:
             else:
                 st.error("User ID not found!")
 
-    elif login_choice == "📝 New Customer Self-Registration":
+    elif login_choice == "📝 New Registration":
         st.subheader("📝 Self Register as New Customer")
         auto_id = generate_auto_client_id()
         
         col1, col2 = st.columns(2)
         with col1:
-            c_name = st.text_input("Full Name *")
-            c_father = st.text_input("Father's Name")
-            c_mobile = st.text_input("Mobile Number *")
-            c_address = st.text_area("Delivery / Home Address *")
+            c_name = st.text_input("👤 Full Name *")
+            c_father = st.text_input("👨‍👦 Father's Name")
+            c_mobile = st.text_input("📱 Mobile Number *")
+            c_address = st.text_area("🏠 Delivery / Home Address *")
         with col2:
-            c_unique = st.text_input("Unique Client ID (Auto-Generated) *", value=auto_id)
-            c_userid = st.text_input("Create User ID / Username *")
-            c_pass = st.text_input("Create Password *", type="password")
+            c_unique = st.text_input("🆔 Unique Client ID (Auto) *", value=auto_id)
+            c_userid = st.text_input("🧑‍💻 Create User ID *")
+            c_pass = st.text_input("🔑 Create Password *", type="password")
 
-        if st.button("Register & Send Approval Request"):
+        if st.button("✨ Register & Send Approval Request"):
             if not c_name or not c_userid or not c_pass or not c_mobile or not c_address or not c_unique:
                 st.error("कृपया सभी आवश्यक (*) फ़ील्ड भरें!")
             else:
@@ -325,14 +326,14 @@ if not st.session_state.logged_in:
                 except sqlite3.IntegrityError:
                     st.error("⚠️ यह Username पहले से मौजूद है। कृपया दूसरा चुनें।")
 
-    elif login_choice == "🔄 Forgot Password / Reset":
+    elif login_choice == "🔄 Reset Password":
         st.subheader("🔄 Reset Your Password")
-        f_user = st.text_input("Enter Your User ID / Username")
-        f_mobile = st.text_input("Enter Registered Mobile Number")
-        f_unique = st.text_input("Enter Unique Client ID")
-        new_pass = st.text_input("Enter New Password", type="password")
+        f_user = st.text_input("🆔 Enter Your User ID / Username")
+        f_mobile = st.text_input("📱 Enter Registered Mobile Number")
+        f_unique = st.text_input("🏷️ Enter Unique Client ID")
+        new_pass = st.text_input("🔑 Enter New Password", type="password")
 
-        if st.button("Reset Password"):
+        if st.button("🔄 Reset Password"):
             c.execute('''
                 SELECT u.id, c.mobile, c.unique_client_id 
                 FROM users u 
@@ -349,7 +350,7 @@ if not st.session_state.logged_in:
 
 # ================= LOGGED IN DASHBOARD =================
 else:
-    st.sidebar.write(f"Logged in as: **{st.session_state.username}** ({st.session_state.user_role})")
+    st.sidebar.write(f"👤 **{st.session_state.username}** ({st.session_state.user_role})")
     if st.sidebar.button("🔴 Logout"):
         st.session_state.logged_in = False
         st.session_state.username = ""
@@ -361,15 +362,15 @@ else:
     if st.session_state.user_role == "Admin":
         st.title("👨‍💼 Master Admin Control Center")
         menu = [
-            "⚙️ Manage Customers (Update / Delete)",
-            "👥 Approve New Customers",
-            "🛍️ Manage Services & Rates",
-            "📦 View & Manage Customer Orders",
-            "📊 Overall Business Report"
+            "⚙️ Manage Customers",
+            "👥 Approve New Users",
+            "🛍️ Manage Services",
+            "📦 Customer Orders",
+            "📊 Business Report"
         ]
-        choice = st.sidebar.radio("Admin Menu", menu)
+        choice = st.sidebar.radio("📌 Admin Menu", menu)
 
-        if choice == "⚙️ Manage Customers (Update / Delete)":
+        if choice == "⚙️ Manage Customers":
             st.subheader("⚙️ कस्टमर आईडी और डेटा अपडेट या डिलीट करें")
             c.execute("SELECT id, name, unique_client_id, mobile FROM clients ORDER BY id DESC")
             all_clients = c.fetchall()
@@ -378,7 +379,7 @@ else:
                 st.info("कोई कस्टमर डेटा उपलब्ध नहीं है।")
             else:
                 c_dict = {f"[{r[2] if r[2] else 'NO ID'}] {r[1]} - Mob: {r[3]}": r[0] for r in all_clients}
-                selected_label = st.selectbox("कस्टमर चुनें:", list(c_dict.keys()))
+                selected_label = st.selectbox("🔍 कस्टमर चुनें:", list(c_dict.keys()))
                 sel_cid = c_dict[selected_label]
 
                 c.execute("SELECT unique_client_id, name, father_name, pan_number, mobile, address FROM clients WHERE id = ?", (sel_cid,))
@@ -386,10 +387,10 @@ else:
 
                 tab_update, tab_delete = st.tabs(["✏️ अपडेट करें", "🗑️ डिलीट करें"])
                 with tab_update:
-                    up_unique = st.text_input("Unique Client ID", value=c_data[0] if c_data[0] else "")
-                    up_name = st.text_input("Full Name", value=c_data[1] if c_data[1] else "")
-                    up_mobile = st.text_input("Mobile Number", value=c_data[4] if c_data[4] else "")
-                    up_address = st.text_area("Address", value=c_data[5] if c_data[5] else "")
+                    up_unique = st.text_input("🆔 Unique Client ID", value=c_data[0] if c_data[0] else "")
+                    up_name = st.text_input("👤 Full Name", value=c_data[1] if c_data[1] else "")
+                    up_mobile = st.text_input("📱 Mobile Number", value=c_data[4] if c_data[4] else "")
+                    up_address = st.text_area("🏠 Address", value=c_data[5] if c_data[5] else "")
                     
                     if st.button("💾 अपडेट सहेजें"):
                         c.execute("UPDATE clients SET unique_client_id = ?, name = ?, mobile = ?, address = ? WHERE id = ?",
@@ -405,7 +406,7 @@ else:
                         st.success("🗑️ डिलीट कर दिया गया!")
                         st.rerun()
 
-        elif choice == "👥 Approve New Customers":
+        elif choice == "👥 Approve New Users":
             st.subheader("👥 Pending Customer Approvals")
             df_pend = pd.read_sql_query('''
                 SELECT u.id as 'User Table ID', c.unique_client_id as 'Unique ID', c.name as 'Name', u.username as 'Username', c.mobile as 'Mobile'
@@ -415,7 +416,7 @@ else:
             ''', conn)
             if not df_pend.empty:
                 st.dataframe(df_pend, use_container_width=True)
-                app_uid = st.number_input("Enter User Table ID to Approve:", min_value=1, step=1)
+                app_uid = st.number_input("🆔 Enter User Table ID to Approve:", min_value=1, step=1)
                 if st.button("✅ Approve Customer"):
                     c.execute("UPDATE users SET is_approved = 1 WHERE id = ?", (app_uid,))
                     conn.commit()
@@ -424,12 +425,12 @@ else:
             else:
                 st.info("No pending approvals.")
 
-        elif choice == "🛍️ Manage Services & Rates":
-            st.subheader("🛍️ Add Services")
+        elif choice == "🛍️ Manage Services":
+            st.subheader("🛍️ Add Services & Rates")
             with st.form("service_form"):
-                s_cat = st.selectbox("Category:", ["किराना (Grocery)", "कपड़ा प्रेस / ड्राई क्लीन", "टैक्स व अकाउंटिंग"])
-                s_name = st.text_input("Service / Item Name")
-                s_price = st.number_input("Rate (₹):", min_value=0.0, step=10.0)
+                s_cat = st.selectbox("📂 Category:", ["किराना (Grocery)", "कपड़ा प्रेस / ड्राई क्लीन", "टैक्स व अकाउंटिंग"])
+                s_name = st.text_input("🏷️ Service / Item Name")
+                s_price = st.number_input("💵 Rate (₹):", min_value=0.0, step=10.0)
                 if st.form_submit_button("💾 Add Service") and s_name.strip():
                     c.execute("INSERT INTO services (category, service_name, price_rate) VALUES (?, ?, ?)", (s_cat, s_name.strip(), s_price))
                     conn.commit()
@@ -438,8 +439,8 @@ else:
             df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Service', price_rate as 'Rate (₹)' FROM services WHERE is_active = 1", conn)
             st.dataframe(df_serv, use_container_width=True)
 
-        elif choice == "📦 View & Manage Customer Orders":
-            st.subheader("📦 Customer Orders")
+        elif choice == "📦 Customer Orders":
+            st.subheader("📦 Customer Orders Management")
             df_orders = pd.read_sql_query('''
                 SELECT 
                     o.id as 'Order ID',
@@ -455,9 +456,9 @@ else:
             ''', conn)
             if not df_orders.empty:
                 st.dataframe(df_orders, use_container_width=True)
-                ord_id = st.number_input("Order ID to Update Status:", min_value=1, step=1)
-                new_status = st.selectbox("Status:", ["Pending", "Processing", "Out for Delivery", "Completed", "Cancelled"])
-                if st.button("Update Status"):
+                ord_id = st.number_input("🆔 Order ID to Update Status:", min_value=1, step=1)
+                new_status = st.selectbox("🔄 Status:", ["Pending", "Processing", "Out for Delivery", "Completed", "Cancelled"])
+                if st.button("✨ Update Status"):
                     c.execute("UPDATE orders SET order_status = ? WHERE id = ?", (new_status, ord_id))
                     conn.commit()
                     st.success("Status Updated!")
@@ -465,8 +466,8 @@ else:
             else:
                 st.info("No orders found.")
 
-        elif choice == "📊 Overall Business Report":
-            st.subheader("📊 Business Report")
+        elif choice == "📊 Business Report":
+            st.subheader("📊 Business Overview Report")
             df = pd.read_sql_query("SELECT unique_client_id as 'Unique ID', name, mobile, address FROM clients", conn)
             st.dataframe(df, use_container_width=True)
 
@@ -486,14 +487,14 @@ else:
         tab_order, tab_cart, tab_my_orders = st.tabs(["🛒 Browse & Add", "🛍️ My Cart", "📦 My Orders"])
 
         with tab_order:
-            st.subheader("🛍️ Select Items")
+            st.subheader("🛍️ Select Items & Services")
             c.execute("SELECT id, category, service_name, price_rate FROM services WHERE is_active = 1")
             services_list = c.fetchall()
             if services_list:
                 s_dict = {f"[{s[1]}] {s[2]} (₹{s[3]})": s for s in services_list}
-                sel_label = st.selectbox("चुनें:", list(s_dict.keys()))
+                sel_label = st.selectbox("🔍 चुनें:", list(s_dict.keys()))
                 s_item = s_dict[sel_label]
-                qty = st.number_input("मात्रा (Quantity):", min_value=1, value=1, step=1)
+                qty = st.number_input("🔢 मात्रा (Quantity):", min_value=1, value=1, step=1)
                 
                 if st.button("➕ कार्ट में जोड़ें"):
                     st.session_state.cart.append({
@@ -509,7 +510,7 @@ else:
                 grand_total = df_cart['total'].sum()
                 st.markdown(f"### 💵 कुल योग: **₹{grand_total:,.2f}**")
                 
-                del_addr = st.text_area("डिलिवरी पता:", value=c_addr)
+                del_addr = st.text_area("🏠 डिलिवरी पता:", value=c_addr)
                 if st.button("🚀 आर्डर फाइनल करें"):
                     summary_str = ", ".join([f"{i['name']} (x{i['qty']})" for i in st.session_state.cart])
                     today_dt = datetime.now().strftime("%Y-%m-%d %H:%M")
