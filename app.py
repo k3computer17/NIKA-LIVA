@@ -8,12 +8,12 @@ import hashlib
 # Page Configuration
 st.set_page_config(page_title="NIKA - Multi-Service & Tax Portal", layout="wide")
 
-# Custom Styling (Red, White, Light Brown & Pink Theme)
+# Custom Styling (Soft Red, Soft Blue, White & Pink Effect)
 st.markdown("""
     <style>
-    /* Main Background & Font */
+    /* Main Background */
     .main { 
-        background: linear-gradient(135deg, #fcf8f7 0%, #f5ebe6 100%); 
+        background: linear-gradient(135deg, #f7f9fc 0%, #f0f4f8 100%); 
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
     }
     
@@ -21,57 +21,68 @@ st.markdown("""
     h1, h2, h3 { 
         color: #b71c1c !important; 
         font-weight: 700;
-        text-shadow: 1px 1px 2px rgba(216, 27, 96, 0.1);
     }
 
     /* Sidebar Styling */
     [data-testid="stSidebar"] {
         background-color: #ffffff;
-        border-right: 1px solid #ebd5d0;
+        border-right: 1px solid #e3e6ed;
     }
 
-    /* Buttons Styling (Red & Pink Gradient) */
+    /* Buttons Styling (Red & Blue Gradient) */
     .stButton>button {
-        background: linear-gradient(90deg, #d81b60 0%, #b71c1c 100%);
+        background: linear-gradient(90deg, #d32f2f 0%, #1976d2 100%);
         color: white; 
         border-radius: 8px; 
         border: none; 
         padding: 10px 24px; 
         font-weight: bold;
-        box-shadow: 0 4px 10px rgba(216, 27, 96, 0.3);
+        box-shadow: 0 4px 10px rgba(25, 118, 210, 0.2);
         transition: 0.3s;
     }
     .stButton>button:hover {
-        background: linear-gradient(90deg, #c2185b 0%, #880e4f 100%);
-        box-shadow: 0 6px 14px rgba(216, 27, 96, 0.4);
+        background: linear-gradient(90deg, #c62828 0%, #1565c0 100%);
+        box-shadow: 0 6px 14px rgba(25, 118, 210, 0.3);
     }
 
     /* Link Buttons */
     .stLinkButton>a {
-        background: linear-gradient(90deg, #d81b60 0%, #b71c1c 100%) !important;
+        background: linear-gradient(90deg, #d32f2f 0%, #1976d2 100%) !important;
         color: white !important;
         border-radius: 8px !important;
         font-weight: bold !important;
     }
 
-    /* Cards & Containers (White with Light Brown/Pink border) */
-    .element-container, .stTextInput, .stSelectbox, .stTextArea {
-        color: #4e342e;
-    }
-    
-    /* Input Fields Border Focus */
+    /* Input Fields Border Focus & Background */
     input, textarea, select {
-        border-color: #d7ccc8 !important;
+        border-color: #90caf9 !important;
         background-color: #ffffff !important;
         border-radius: 6px !important;
     }
 
-    /* Success / Info Boxes */
+    /* Success / Info Boxes (Soft Red & Soft Blue Effect) */
     .stAlert {
-        background-color: #fff0f3 !important;
-        border: 1px solid #f8bbd0 !important;
-        color: #880e4f !important;
+        background-color: #e3f2fd !important;
+        border: 1px solid #bbdefb !important;
+        color: #0d47a1 !important;
         border-radius: 8px;
+    }
+    
+    /* Tabs Customization */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #ffffff;
+        border-radius: 6px 6px 0px 0px;
+        padding: 10px 16px;
+        color: #333333;
+        border: 1px solid #e0e0e0;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #ffebee !important;
+        color: #b71c1c !important;
+        border-bottom: 2px solid #b71c1c !important;
     }
     </style>
 """, unsafe_allow_html=True)
