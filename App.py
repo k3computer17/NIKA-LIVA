@@ -60,17 +60,6 @@ c.execute('''
     )
 ''')
 
-# Check & Add missing columns safely for old databases
-try:
-    c.execute("ALTER TABLE clients ADD COLUMN unique_client_id TEXT")
-except sqlite3.OperationalError:
-    pass 
-
-try:
-    c.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 1")
-except sqlite3.OperationalError:
-    pass
-
 c.execute('''
     CREATE TABLE IF NOT EXISTS client_gst (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,6 +122,32 @@ c.execute('''
         FOREIGN KEY(client_id) REFERENCES clients(id)
     )
 ''')
+
+# Check & Add missing columns safely for old databases
+try:
+    c.execute("ALTER TABLE clients ADD COLUMN unique_client_id TEXT")
+except sqlite3.OperationalError:
+    pass 
+
+try:
+    c.execute("ALTER TABLE users ADD COLUMN is_approved INTEGER DEFAULT 1")
+except sqlite3.OperationalError:
+    pass
+
+try:
+    c.execute("ALTER TABLE orders ADD COLUMN order_status TEXT DEFAULT 'Pending'")
+except sqlite3.OperationalError:
+    pass
+
+try:
+    c.execute("ALTER TABLE orders ADD COLUMN delivery_address TEXT")
+except sqlite3.OperationalError:
+    pass
+
+try:
+    c.execute("ALTER TABLE orders ADD COLUMN remarks TEXT")
+except sqlite3.OperationalError:
+    pass
 
 # Create Default Admin User if not exists
 c.execute("SELECT * FROM users WHERE username = 'admin'")
@@ -224,7 +239,6 @@ if not st.session_state.logged_in:
     elif login_choice == "📝 New Customer Self-Registration":
         st.subheader("📝 Self Register as New Customer")
         
-        # Auto-generated ID
         auto_id = generate_auto_client_id()
         
         col1, col2 = st.columns(2)
@@ -435,16 +449,16 @@ else:
             df_orders = pd.read_sql_query('''
                 SELECT 
                     o.id as 'Order ID',
-                    c.unique_client_id as 'Unique ID',
-                    c.name as 'Customer Name',
-                    c.mobile as 'Mobile',
+                    COALESCE(c.unique_client_id, 'N/A') as 'Unique ID',
+                    COALESCE(c.name, 'N/A') as 'Customer Name',
+                    COALESCE(c.mobile, 'N/A') as 'Mobile',
                     o.items_summary as 'Items Ordered',
                     o.total_price as 'Total Bill (₹)',
                     o.order_date as 'Date',
                     o.delivery_address as 'Address',
                     o.order_status as 'Status'
                 FROM orders o
-                JOIN clients c ON o.client_id = c.id
+                LEFT JOIN clients c ON o.client_id = c.id
                 ORDER BY o.id DESC
             ''', conn)
             if not df_orders.empty:
@@ -521,8 +535,12 @@ else:
         c.execute("SELECT unique_client_id, name, pan_number, mobile, address FROM clients WHERE id = ?", (cid,))
         client_info = c.fetchone()
 
-        c_uid = client_info[0] if client_info[0] else "N/A"
-        st.info(f"👤 **{client_info[1]}** | 🆔 **ID:** `{c_uid}` | 📱 **Mobile:** {client_info[3]}")
+        c_uid = client_info[0] if client_info and client_info[0] else "N/A"
+        c_name = client_info[1] if client_info and client_info[1] else "Customer"
+        c_mob = client_info[3] if client_info and client_info[3] else "N/A"
+        c_addr = client_info[4] if client_info and client_info[4] else ""
+
+        st.info(f"👤 **{c_name}** | 🆔 **ID:** `{c_uid}` | 📱 **Mobile:** {c_mob}")
 
         tab_order, tab_cart, tab_my_orders, tab_ledger = st.tabs([
             "🛒 Browse & Add Items", 
@@ -573,7 +591,7 @@ else:
 
                 st.markdown("---")
                 st.subheader("📄 बिल जनरेट करें और ऑर्डर दें")
-                del_addr = st.text_area("डिलिवरी पता (Delivery Address):", value=client_info[4] if client_info[4] else "")
+                del_addr = st.text_area("डिलिवरी पता (Delivery Address):", value=c_addr)
                 note = st.text_input("विशेष निर्देश (Special Note):")
 
                 if st.button("🚀 आर्डर फाइनल करें (Place Final Order & Bill)"):
@@ -588,12 +606,12 @@ else:
                     
                     st.success("🎉 आपका ऑर्डर सफलतापूर्वक दर्ज हो गया है!")
                     
-                    bill_msg = f"🧾 *NIKA STORE - OFFICIAL BILL* 🧾\n\n👤 कस्टमर: {client_info[1]} (ID: {c_uid})\n📱 मोबाइल: {client_info[3]}\n\n*सामान सूची:*\n{summary_str}\n\n💰 *कुल योग: ₹{grand_total:,.2f}*\n🏠 पता: {del_addr}\n\nधन्यवाद!"
+                    bill_msg = f"🧾 *NIKA STORE - OFFICIAL BILL* 🧾\n\n👤 कस्टमर: {c_name} (ID: {c_uid})\n📱 मोबाइल: {c_mob}\n\n*सामान सूची:*\n{summary_str}\n\n💰 *कुल योग: ₹{grand_total:,.2f}*\n🏠 पता: {del_addr}\n\nधन्यवाद!"
                     
                     st.markdown(f"""
                     <div class="bill-box">
                         <h3>🧾 डिजिटल बिल (Invoice)</h3>
-                        <p><b>कस्टमर:</b> {client_info[1]} ({c_uid})</p>
+                        <p><b>कस्टमर:</b> {c_name} ({c_uid})</p>
                         <p><b>आइटम्स:</b> {summary_str}</p>
                         <hr>
                         <h3><b>कुल भुगतान राशि: ₹{grand_total:,.2f}</b></h3>
