@@ -95,7 +95,7 @@ def check_hashes(password, hashed_text):
         return hashed_text
     return False
 
-# Database Connection
+# Database Connection (आपकी पुरानी फाइल का नाम)
 db_file = 'nika_clients_v2.db'
 conn = sqlite3.connect(db_file, check_same_thread=False)
 c = conn.cursor()
@@ -123,45 +123,9 @@ c.execute('''
         address TEXT,
         itr_username TEXT,
         itr_password TEXT,
-        created_date TEXT
-    )
-''')
-
-c.execute('''
-    CREATE TABLE IF NOT EXISTS client_gst (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER,
-        gst_number TEXT,
-        gst_username TEXT,
-        gst_password TEXT,
-        trade_name TEXT,
-        FOREIGN KEY(client_id) REFERENCES clients(id)
-    )
-''')
-
-c.execute('''
-    CREATE TABLE IF NOT EXISTS client_years (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER,
-        financial_year TEXT,
-        annual_fee REAL DEFAULT 0,
-        return_type TEXT,
-        income_tax_status TEXT,
-        gst_status TEXT,
-        FOREIGN KEY(client_id) REFERENCES clients(id)
-    )
-''')
-
-c.execute('''
-    CREATE TABLE IF NOT EXISTS payments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER,
-        financial_year TEXT,
-        payment_date TEXT,
-        amount_paid REAL,
-        payment_mode TEXT,
-        remarks TEXT,
-        FOREIGN KEY(client_id) REFERENCES clients(id)
+        created_date TEXT,
+        latitude TEXT,
+        longitude TEXT
     )
 ''')
 
@@ -189,6 +153,14 @@ c.execute('''
         FOREIGN KEY(client_id) REFERENCES clients(id)
     )
 ''')
+
+c.execute('''
+    CREATE TABLE IF NOT EXISTS admin_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        setting_key TEXT UNIQUE,
+        setting_value TEXT
+    )
+''')
 conn.commit()
 
 # --- SAFE MIGRATION ---
@@ -204,7 +176,6 @@ add_column_safe("orders", "delivery_address", "TEXT")
 add_column_safe("orders", "remarks", "TEXT")
 add_column_safe("users", "is_approved", "INTEGER DEFAULT 1")
 add_column_safe("clients", "unique_client_id", "TEXT")
-add_column_safe("clients", "customer_photo", "TEXT")
 add_column_safe("clients", "latitude", "TEXT")
 add_column_safe("clients", "longitude", "TEXT")
 
@@ -234,6 +205,11 @@ def create_whatsapp_link(client_mobile, message):
     encoded_msg = urllib.parse.quote(message)
     return f"https://api.whatsapp.com/send?phone={clean_mobile}&text={encoded_msg}"
 
+def get_setting(key):
+    c.execute("SELECT setting_value FROM admin_settings WHERE setting_key = ?", (key,))
+    res = c.fetchone()
+    return res[0] if res else ""
+
 # Session State Initialization
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -246,10 +222,35 @@ if "client_id" not in st.session_state:
 if "cart" not in st.session_state:
     st.session_state.cart = []
 
+# ================= UNIVERSAL HEADER (LOGO, BANNER & TAX FOR CUSTOMER & ADMIN BOTH) =================
+app_logo = get_setting("logo_url")
+app_banner = get_setting("banner_url")
+global_tax_info = get_setting("tax_info")
+
+# होल्डिंग बैनर दिखाना (यदि एडमिन ने सेट किया है)
+if app_banner:
+    st.image(app_banner, use_container_width=True)
+
+# लोगो और टाइटल दिखाना
+if app_logo:
+    col_l1, col_l2 = st.columns([1, 6])
+    with col_l1:
+        st.image(app_logo, width=90)
+    with col_l2:
+        st.title("🏢 NIKA - Multi-Service & Tax Portal")
+else:
+    st.title("🏢 NIKA - Multi-Service & Tax Portal")
+
+# यदि एडमिन ने टैक्स या बिलिंग नोटिस सेट किया है, तो वह भी बोर्ड/स्क्रीन पर ऊपर ही दिखाई देगा
+if global_tax_info:
+    st.markdown(f"""
+        <div style="background-color: #fbe9e7; padding: 12px; border-radius: 8px; border-left: 5px solid #d84315; margin-bottom: 15px;">
+            <strong style="color: #d84315;">📢 Tax & Portal Notice:</strong> {global_tax_info}
+        </div>
+    """, unsafe_allow_html=True)
+
 # ================= LOGIN, SIGNUP & FORGOT PORTAL =================
 if not st.session_state.logged_in:
-    st.title("🏢 NIKA Multi-Service & Tax Portal")
-    
     login_menu = ["🔐 Admin Login", "👤 Customer Login", "📝 New Registration", "🔄 Reset Password"]
     login_choice = st.sidebar.selectbox("📌 Navigation", login_menu)
 
@@ -294,7 +295,7 @@ if not st.session_state.logged_in:
                 st.error("User ID not found!")
 
     elif login_choice == "📝 New Registration":
-        st.subheader("📝 Self Register as New Customer (with Photo & Location)")
+        st.subheader("📝 Self Register as New Customer")
         auto_id = generate_auto_client_id()
         
         col1, col2 = st.columns(2)
@@ -309,17 +310,9 @@ if not st.session_state.logged_in:
             c_pass = st.text_input("🔑 Create Password *", type="password")
 
         st.markdown("---")
-        st.subheader("📸 लाइव फोटो और 📍 लाइव लोकेशन कैप्चर करें")
-        
-        photo_col, loc_col = st.columns(2)
-        with photo_col:
-            st.write("📷 **कस्टमर की लाइव फोटो लें:**")
-            camera_image = st.camera_input("कैमरा चालू करें")
-            
-        with loc_col:
-            st.write("📍 **लोकेशन विवरण:**")
-            lat_input = st.text_input("🌐 Latitude (अक्षांश) दर्ज करें", value="23.2599")
-            lon_input = st.text_input("🌐 Longitude (देशांतर) दर्ज करें", value="77.4126")
+        st.subheader("📍 लोकेशन विवरण")
+        lat_input = st.text_input("🌐 Latitude (अक्षांश)", value="23.2599")
+        lon_input = st.text_input("🌐 Longitude (देशांतर)", value="77.4126")
 
         if st.button("✨ Register & Send Approval Request"):
             if not c_name or not c_userid or not c_pass or not c_mobile or not c_address or not c_unique:
@@ -337,7 +330,6 @@ if not st.session_state.logged_in:
                     c.execute("INSERT INTO users (username, password, role, client_id, is_approved) VALUES (?, ?, 'Customer', ?, 0)",
                               (c_userid, make_hashes(c_pass), new_client_id))
                     conn.commit()
-                    
                     st.success(f"✅ रजिस्ट्रेशन सफल हुआ! आपकी यूनिक आईडी है: **{c_unique.upper()}**")
                     
                     wa_text = f"नमस्ते एडमिन, मैंने नया रजिस्ट्रेशन किया है।\n\nनाम: {c_name}\nयूजर आईडी: {c_userid}\nयूनिक आईडी: {c_unique.upper()}\nलोकेशन: https://maps.google.com/?q={lat_input},{lon_input}\n\nकृपया मेरा अकाउंट अप्रूव करें।"
@@ -370,6 +362,7 @@ if not st.session_state.logged_in:
 # ================= LOGGED IN DASHBOARD =================
 else:
     st.sidebar.write(f"👤 **{st.session_state.username}** ({st.session_state.user_role})")
+    
     if st.sidebar.button("🔴 Logout"):
         st.session_state.logged_in = False
         st.session_state.username = ""
@@ -385,6 +378,7 @@ else:
             "👥 Approve New Users",
             "🛍️ Manage Services",
             "📦 Customer Orders",
+            "🖼️ Portal Branding & Tax Settings (Admin Only)",
             "📊 Business Report"
         ]
         choice = st.sidebar.radio("📌 Admin Menu", menu)
@@ -487,6 +481,25 @@ else:
                     st.rerun()
             else:
                 st.info("No orders found.")
+
+        elif choice == "🖼️ Portal Branding & Tax Settings (Admin Only)":
+            st.subheader("🖼️ होल्डिंग बैनर, लोगो और टैक्स विवरण सेट करें (कस्टमर बोर्ड पर दिखेगा)")
+            
+            curr_banner = get_setting("banner_url")
+            curr_logo = get_setting("logo_url")
+            curr_tax = get_setting("tax_info")
+
+            with st.form("branding_form"):
+                b_url = st.text_input("🖼️ होल्डिंग बैनर इमेज लिंक (Banner Image URL):", value=curr_banner)
+                l_url = st.text_input("🟢 लोगो इमेज लिंक (Logo Image URL - 256x256):", value=curr_logo)
+                t_info = st.text_area("📊 टैक्स / बिलिंग विवरण (Tax Info / GST Details):", value=curr_tax)
+                
+                if st.form_submit_button("💾 सेटिंग्स सहेजें"):
+                    for k, val in [("banner_url", b_url), ("logo_url", l_url), ("tax_info", t_info)]:
+                        c.execute("INSERT OR REPLACE INTO admin_settings (setting_key, setting_value) VALUES (?, ?)", (k, val))
+                    conn.commit()
+                    st.success("✅ सेटिंग्स सहेज ली गई हैं और अब सभी कस्टमर के बोर्ड पर दिखेंगी!")
+                    st.rerun()
 
         elif choice == "📊 Business Report":
             st.subheader("📊 Business Overview Report")
