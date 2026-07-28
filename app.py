@@ -5,10 +5,11 @@ from datetime import datetime
 import urllib.parse
 import hashlib
 
-# Page Configuration
+# ---------------------------------------------------------
+# 1. Page Configuration & Custom Styling
+# ---------------------------------------------------------
 st.set_page_config(page_title="NIKA - Multi-Service & Tax Portal", layout="wide")
 
-# Custom Styling
 st.markdown("""
     <style>
     .main { 
@@ -38,15 +39,19 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Password Utilities
+# ---------------------------------------------------------
+# 2. Security & Password Utilities
+# ---------------------------------------------------------
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
-# Database Setup
-DB_FILE = 'nika_clients_v3.db'
+# ---------------------------------------------------------
+# 3. Database Initialization (Permanent Storage)
+# ---------------------------------------------------------
+DB_FILE = 'nika_clients_v4.db'
 
 def get_db_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -54,6 +59,8 @@ def get_db_connection():
 def init_db():
     with get_db_connection() as conn:
         c = conn.cursor()
+        
+        # User Table
         c.execute('''CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
@@ -62,6 +69,7 @@ def init_db():
                         client_id INTEGER,
                         is_approved INTEGER DEFAULT 1)''')
         
+        # Client Table
         c.execute('''CREATE TABLE IF NOT EXISTS clients (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         unique_client_id TEXT,
@@ -76,10 +84,12 @@ def init_db():
                         latitude TEXT,
                         longitude TEXT)''')
 
+        # Categories Table
         c.execute('''CREATE TABLE IF NOT EXISTS categories (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         category_name TEXT UNIQUE)''')
 
+        # Services / Products Table
         c.execute('''CREATE TABLE IF NOT EXISTS services (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         category TEXT,
@@ -89,6 +99,19 @@ def init_db():
                         description TEXT,
                         is_active INTEGER DEFAULT 1)''')
 
+        # Persistent Cart Table (Does NOT delete on Refresh)
+        c.execute('''CREATE TABLE IF NOT EXISTS cart_items (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        client_id INTEGER,
+                        category TEXT,
+                        item_name TEXT,
+                        unit TEXT,
+                        qty REAL,
+                        rate REAL,
+                        total REAL,
+                        FOREIGN KEY(client_id) REFERENCES clients(id))''')
+
+        # Orders Table
         c.execute('''CREATE TABLE IF NOT EXISTS orders (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         client_id INTEGER,
@@ -100,6 +123,7 @@ def init_db():
                         remarks TEXT,
                         FOREIGN KEY(client_id) REFERENCES clients(id))''')
 
+        # Admin Settings Table
         c.execute('''CREATE TABLE IF NOT EXISTS admin_settings (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         setting_key TEXT UNIQUE,
@@ -110,22 +134,7 @@ def init_db():
         for cat in default_categories:
             c.execute("INSERT OR IGNORE INTO categories (category_name) VALUES (?)", (cat,))
 
-        # Migrations
-        for table, col, col_type in [
-            ("services", "unit", "TEXT DEFAULT 'Pc'"),
-            ("orders", "order_status", "TEXT DEFAULT 'Pending'"),
-            ("orders", "delivery_address", "TEXT"),
-            ("users", "is_approved", "INTEGER DEFAULT 1"),
-            ("clients", "unique_client_id", "TEXT"),
-            ("clients", "latitude", "TEXT"),
-            ("clients", "longitude", "TEXT")
-        ]:
-            try:
-                c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
-            except sqlite3.OperationalError:
-                pass
-
-        # Create Default Admin
+        # Default Admin User
         c.execute("SELECT id FROM users WHERE username = 'admin'")
         if not c.fetchone():
             c.execute("INSERT INTO users (username, password, role, is_approved) VALUES (?, ?, ?, ?)",
@@ -134,7 +143,9 @@ def init_db():
 
 init_db()
 
-# Helper Functions
+# ---------------------------------------------------------
+# 4. Helper & Database Query Functions
+# ---------------------------------------------------------
 MY_CONTACT = "8358013017"
 
 def generate_auto_client_id():
@@ -167,12 +178,43 @@ def get_categories():
         c.execute("SELECT category_name FROM categories ORDER BY category_name ASC")
         return [r[0] for r in c.fetchall()]
 
-# Session State Initialization
-for key in ["logged_in", "username", "user_role", "client_id", "cart"]:
-    if key not in st.session_state:
-        st.session_state[key] = False if key == "logged_in" else ([] if key == "cart" else None)
+# Database-backed Cart Functions
+def add_to_db_cart(client_id, category, item_name, unit, qty, rate, total):
+    with get_db_connection() as conn:
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO cart_items (client_id, category, item_name, unit, qty, rate, total)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (client_id, category, item_name, unit, qty, rate, total))
+        conn.commit()
 
-# Branding Header
+def get_db_cart(client_id):
+    with get_db_connection() as conn:
+        return pd.read_sql_query('''
+            SELECT id, category, item_name, unit, qty, rate, total 
+            FROM cart_items WHERE client_id = ?
+        ''', conn, params=(client_id,))
+
+def clear_db_cart(client_id):
+    with get_db_connection() as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM cart_items WHERE client_id = ?", (client_id,))
+        conn.commit()
+
+def delete_cart_item(cart_id):
+    with get_db_connection() as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM cart_items WHERE id = ?", (cart_id,))
+        conn.commit()
+
+# Session State Setup
+for key in ["logged_in", "username", "user_role", "client_id"]:
+    if key not in st.session_state:
+        st.session_state[key] = False if key == "logged_in" else None
+
+# ---------------------------------------------------------
+# 5. Header & Branding Setup
+# ---------------------------------------------------------
 app_logo = get_setting("logo_url")
 app_banner = get_setting("banner_url")
 global_tax_info = get_setting("tax_info")
@@ -196,7 +238,9 @@ if global_tax_info:
         </div>
     """, unsafe_allow_html=True)
 
-# Authentication Flow
+# ---------------------------------------------------------
+# 6. Login & Registration
+# ---------------------------------------------------------
 if not st.session_state.logged_in:
     login_choice = st.sidebar.selectbox("📌 Navigation", ["🔐 Admin Login", "👤 Customer Login", "📝 New Registration", "🔄 Reset Password"])
 
@@ -312,7 +356,9 @@ if not st.session_state.logged_in:
                 else:
                     st.error("❌ विवरण (Details) मेल नहीं खा रहे हैं।")
 
-# Dashboard View
+# ---------------------------------------------------------
+# 7. Dashboard Sections
+# ---------------------------------------------------------
 else:
     st.sidebar.write(f"👤 **{st.session_state.username}** ({st.session_state.user_role})")
     
@@ -329,7 +375,7 @@ else:
         ])
 
         if choice == "⚙️ Manage Customers":
-            st.subheader("⚙️ कस्टमर आईडी और डेटा अपडेट या डिलीट करें")
+            st.subheader("⚙️ कस्टमर डेटा का प्रबंधन")
             with get_db_connection() as conn:
                 c = conn.cursor()
                 c.execute("SELECT id, name, unique_client_id, mobile FROM clients ORDER BY id DESC")
@@ -366,6 +412,7 @@ else:
                         if st.button("🗑️ डिलीट करें"):
                             c.execute("DELETE FROM clients WHERE id = ?", (sel_cid,))
                             c.execute("DELETE FROM users WHERE client_id = ?", (sel_cid,))
+                            c.execute("DELETE FROM cart_items WHERE client_id = ?", (sel_cid,))
                             conn.commit()
                             st.success("🗑️ डिलीट कर दिया गया!")
                             st.rerun()
@@ -394,12 +441,11 @@ else:
             st.subheader("🛍️ कैटेगेरी एवं सर्विस/आइटम प्रबंधन")
             
             tab_add_cat, tab_add_item, tab_view_items = st.tabs(["📂 Category जोड़ें", "➕ नया Item/Service जोड़ें", "📋 Items एवं Services लिस्ट"])
-            
             categories_list = get_categories()
 
             with tab_add_cat:
                 st.write("### 📂 नई Category दर्ज करें")
-                new_cat_input = st.text_input("कैटेगरी का नाम दर्ज करें (जैसे: इलेक्ट्रॉनिक, किराना, कंसल्टेंसी):")
+                new_cat_input = st.text_input("कैटेगरी का नाम दर्ज करें:")
                 if st.button("➕ Category सहेजें"):
                     if new_cat_input.strip():
                         try:
@@ -411,8 +457,6 @@ else:
                                 st.rerun()
                         except sqlite3.IntegrityError:
                             st.error("⚠️ यह Category पहले से मौजूद है!")
-                    else:
-                        st.error("कृपया Category का सही नाम लिखें!")
 
             with tab_add_item:
                 st.write("### ➕ Item / Service रेट और इकाई (Unit) के साथ जोड़ें")
@@ -435,21 +479,17 @@ else:
                                     c.execute("INSERT INTO services (category, service_name, unit, price_rate) VALUES (?, ?, ?, ?)", 
                                               (s_cat, s_name.strip(), s_unit, s_price))
                                     conn.commit()
-                                    st.success(f"✅ Item '{s_name.strip()}' ({s_unit}) सफलतापूर्वक Category '{s_cat}' में जोड़ा गया!")
+                                    st.success("✅ Item सफलतापूर्वक जोड़ा गया!")
                                     st.rerun()
-                            else:
-                                st.error("कृपया Item का नाम लिखें!")
 
             with tab_view_items:
                 st.write("### 📋 सभी Items एवं Categories देखें")
                 filter_cat = st.selectbox("🔍 Category के अनुसार फ़िल्टर करें:", ["सभी Categories"] + categories_list)
-                
                 with get_db_connection() as conn:
                     if filter_cat == "सभी Categories":
-                        df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Item Name', unit as 'Unit (इकाई)', price_rate as 'Rate (₹)' FROM services WHERE is_active = 1 ORDER BY category ASC", conn)
+                        df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Item Name', unit as 'Unit', price_rate as 'Rate (₹)' FROM services WHERE is_active = 1 ORDER BY category ASC", conn)
                     else:
-                        df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Item Name', unit as 'Unit (इकाई)', price_rate as 'Rate (₹)' FROM services WHERE is_active = 1 AND category = ? ORDER BY service_name ASC", conn, params=(filter_cat,))
-                    
+                        df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Item Name', unit as 'Unit', price_rate as 'Rate (₹)' FROM services WHERE is_active = 1 AND category = ? ORDER BY service_name ASC", conn, params=(filter_cat,))
                     st.dataframe(df_serv, use_container_width=True)
 
         elif choice == "📦 Customer Orders":
@@ -480,9 +520,9 @@ else:
             curr_tax = get_setting("tax_info")
 
             with st.form("branding_form"):
-                b_url = st.text_input("🖼️ होल्डिंग बैनर इमेज लिंक (Banner Image URL):", value=curr_banner)
-                l_url = st.text_input("🟢 लोगो इमेज लिंक (Logo Image URL):", value=curr_logo)
-                t_info = st.text_area("📊 टैक्स / बिलिंग विवरण (Tax Info):", value=curr_tax)
+                b_url = st.text_input("🖼️ बैनर इमेज लिंक (Banner URL):", value=curr_banner)
+                l_url = st.text_input("🟢 लोगो इमेज लिंक (Logo URL):", value=curr_logo)
+                t_info = st.text_area("📊 टैक्स विवरण (Tax Info):", value=curr_tax)
                 
                 if st.form_submit_button("💾 सेटिंग्स सहेजें"):
                     with get_db_connection() as conn:
@@ -490,7 +530,7 @@ else:
                         for k, val in [("banner_url", b_url), ("logo_url", l_url), ("tax_info", t_info)]:
                             c.execute("INSERT OR REPLACE INTO admin_settings (setting_key, setting_value) VALUES (?, ?)", (k, val))
                         conn.commit()
-                        st.success("✅ सेटिंग्स सहेज ली गई हैं!")
+                        st.success("✅ सेटिंग्स सुरक्षित हो गईं!")
                         st.rerun()
 
         elif choice == "📊 Business Report":
@@ -520,7 +560,6 @@ else:
 
         with tab_order:
             st.subheader("🛍️ Category से Item चुनें")
-            
             categories_list = get_categories()
             if not categories_list:
                 st.warning("अभी कोई Category उपलब्ध नहीं है।")
@@ -540,12 +579,11 @@ else:
                     st.markdown("---")
                     selected_item_label = st.selectbox(f"🏷️ 2. Item / Service चुनें:", list(item_dict.keys()))
                     chosen_item = item_dict[selected_item_label]
-                    
                     item_unit = chosen_item[2] if chosen_item[2] else "Pc"
 
                     c_qty, c_unit, c_rate = st.columns(3)
                     with c_qty:
-                        qty = st.number_input("🔢 मात्रा (Quantity):", min_value=1, value=1, step=1)
+                        qty = st.number_input("🔢 मात्रा (Quantity):", min_value=1.0, value=1.0, step=1.0)
                     with c_unit:
                         st.text_input("📏 इकाई (Unit):", value=item_unit, disabled=True)
                     with c_rate:
@@ -553,37 +591,39 @@ else:
                     
                     if st.button("➕ कार्ट में जोड़ें"):
                         item_total = qty * rate
-                        st.session_state.cart.append({
-                            "id": chosen_item[0], 
-                            "category": selected_cat, 
-                            "name": chosen_item[1], 
-                            "unit": item_unit,
-                            "qty": qty,
-                            "rate": rate, 
-                            "total": item_total
-                        })
-                        st.success(f"✅ '{chosen_item[1]}' कार्ट में जुड़ गया!")
+                        add_to_db_cart(cid, selected_cat, chosen_item[1], item_unit, qty, rate, item_total)
+                        st.success(f"✅ '{chosen_item[1]}' डेटाबेस कार्ट में सुरक्षित जुड़ गया!")
 
         with tab_cart:
-            st.subheader("🛍️ आपकी कार्ट (Cart Details)")
-            if st.session_state.cart:
-                df_cart = pd.DataFrame(st.session_state.cart)
-                
-                # Separate columns clearly
-                df_cart_display = df_cart[['category', 'name', 'unit', 'qty', 'rate', 'total']]
-                df_cart_display.columns = ['Category', 'Item Name (सामग्री का नाम)', 'Unit (इकाई)', 'Quantity (मात्रा)', 'Rate (₹)', 'Total Amount (₹)']
+            st.subheader("🛍️ आपकी कार्ट (Database Persistent Cart)")
+            
+            # Fetch Cart directly from Database Table
+            df_cart_db = get_db_cart(cid)
+            
+            if not df_cart_db.empty:
+                df_cart_display = df_cart_db[['category', 'item_name', 'unit', 'qty', 'rate', 'total']].copy()
+                df_cart_display.columns = ['Category', 'Item Name', 'Unit', 'Quantity', 'Rate (₹)', 'Total Amount (₹)']
                 
                 st.dataframe(df_cart_display, use_container_width=True)
                 
-                grand_total = df_cart['total'].sum()
+                grand_total = df_cart_db['total'].sum()
                 st.markdown(f"### 💵 कुल योग (Grand Total): **₹{grand_total:,.2f}**")
                 
+                c_del1, c_del2 = st.columns([3, 1])
+                with c_del1:
+                    del_item_id = st.selectbox("🗑️ कार्ट से आइटम हटाने के लिए चुनें:", df_cart_db['id'].tolist(), format_func=lambda x: df_cart_db[df_cart_db['id']==x]['item_name'].values[0])
+                with c_del2:
+                    if st.button("❌ Item हटाएं"):
+                        delete_cart_item(del_item_id)
+                        st.rerun()
+
+                st.markdown("---")
                 del_addr = st.text_area("🏠 डिलिवरी पता:", value=c_addr)
+                
                 if st.button("🚀 आर्डर फाइनल करें"):
-                    # Structured clear summary text
                     summary_lines = []
-                    for i in st.session_state.cart:
-                        summary_lines.append(f"• {i['name']} | Qty: {i['qty']} {i['unit']} | Rate: ₹{i['rate']} | Total: ₹{i['total']}")
+                    for _, row in df_cart_db.iterrows():
+                        summary_lines.append(f"• {row['item_name']} | Qty: {row['qty']} {row['unit']} | Rate: ₹{row['rate']} | Total: ₹{row['total']}")
                     
                     summary_str = "\n".join(summary_lines)
                     today_dt = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -596,17 +636,20 @@ else:
                         ''', (cid, summary_str, grand_total, today_dt, del_addr))
                         conn.commit()
                     
-                    st.success("🎉 ऑर्डर दर्ज हो गया!")
+                    # Clear Cart only after Order Placement
+                    clear_db_cart(cid)
+                    
+                    st.success("🎉 ऑर्डर सफलतापूर्वक दर्ज हो गया!")
                     bill_msg = f"🧾 *NIKA STORE BILL* 🧾\n👤 *Customer:* {c_name} ({c_uid})\n📅 *Date:* {today_dt}\n\n*ITEMS DETAILS:*\n{summary_str}\n\n💰 *Grand Total: ₹{grand_total:,.2f}*\n🏠 *Address:* {del_addr}"
                     st.link_button("💬 व्हाट्सएप पर बिल भेजें", create_whatsapp_link(MY_CONTACT, bill_msg), use_container_width=True)
-                    st.session_state.cart = []
+                    st.rerun()
             else:
-                st.info("🛒 कार्ट खाली है।")
+                st.info("🛒 आपकी कार्ट खाली है। रिफ्रेश करने पर भी डेटाबेस में सुरक्षित डेटा डिलीट नहीं होगा!")
 
         with tab_my_orders:
             st.subheader("📦 मेरे ऑर्डर्स")
             with get_db_connection() as conn:
-                df_my = pd.read_sql_query("SELECT id as 'Order ID', items_summary as 'Order Items (Item | Qty & Unit | Rate)', total_price as 'Total (₹)', order_date as 'Date', order_status as 'Status' FROM orders WHERE client_id = ? ORDER BY id DESC", conn, params=(cid,))
+                df_my = pd.read_sql_query("SELECT id as 'Order ID', items_summary as 'Order Items', total_price as 'Total (₹)', order_date as 'Date', order_status as 'Status' FROM orders WHERE client_id = ? ORDER BY id DESC", conn, params=(cid,))
                 if not df_my.empty:
                     st.dataframe(df_my, use_container_width=True)
                 else:
