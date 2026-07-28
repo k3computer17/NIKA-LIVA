@@ -7,3 +7,7 @@ streamlit-geolocation
 streamlit
 pandas
 openpyxl
+psycopg2-binary
+sqlalchemy
+pandas
+streamlit
