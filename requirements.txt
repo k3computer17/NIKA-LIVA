@@ -1,13 +1,5 @@
 streamlit
 pandas
-gspread
-oauth2client
-google-api-python-client
-streamlit-geolocation
-streamlit
-pandas
-openpyxl
 psycopg2-binary
 sqlalchemy
-pandas
-streamlit
+openpyxl
