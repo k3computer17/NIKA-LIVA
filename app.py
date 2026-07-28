@@ -292,7 +292,7 @@ if not st.session_state.logged_in:
                 if res:
                     if res[2] == 0:
                         st.warning("⚠️ आपका अकाउंट अभी अप्रूव नहीं हुआ है।")
-                        w_msg = f"नमस्ते एडमिन, मैंने रजिस्ट्रेशन किया है। कृपया मेरा यूजर आईडी ({user}) अप्रूव कर दें।"
+                        w_msg = f"नमस्ते NIKA-LIVA Admin, मैंने रजिस्ट्रेशन किया है। कृपया मेरा यूजर आईडी ({user}) अप्रूव कर दें।"
                         st.link_button("💬 Send Approval Request on WhatsApp", create_whatsapp_link(MY_CONTACT, w_msg))
                     elif check_hashes(passwd, res[0]):
                         st.session_state.logged_in = True
@@ -307,7 +307,7 @@ if not st.session_state.logged_in:
                     st.error("User ID not found!")
 
     elif login_choice == "📝 New Registration":
-        st.subheader("📝 Customer Registration")
+        st.subheader("📝 Customer Registration (Live GPS Location)")
         auto_id = generate_auto_client_id()
         
         col1, col2 = st.columns(2)
@@ -315,16 +315,87 @@ if not st.session_state.logged_in:
             c_name = st.text_input("👤 Full Name *")
             c_father = st.text_input("👨‍👦 Father's Name")
             c_mobile = st.text_input("📱 Mobile Number *")
-            c_address = st.text_area("🏠 Delivery / Home Address *")
         with col2:
             c_unique = st.text_input("🆔 Unique Client ID (Auto) *", value=auto_id)
             c_userid = st.text_input("🧑‍💻 Create User ID *")
             c_pass = st.text_input("🔑 Create Password *", type="password")
 
         st.markdown("---")
-        st.subheader("📍 लोकेशन विवरण")
-        lat_input = st.text_input("🌐 Latitude", value="23.2599")
-        lon_input = st.text_input("🌐 Longitude", value="77.4126")
+        st.subheader("📍 लाइव जीपीएस लोकेशन (Live GPS Location)")
+
+        # ---------------------------------------------------------
+        # HTML + JS Code to Fetch Mobile GPS Location Automatically
+        # ---------------------------------------------------------
+        import streamlit.components.v1 as components
+
+        gps_html_code = """
+        <div style="font-family: sans-serif; background: #fff3e0; padding: 15px; border-radius: 8px; border: 1px solid #ffccbc;">
+            <p style="margin:0 0 10px 0; font-weight: bold; color: #d84315;">📡 ऑटोमेटिक लाइव लोकेशन डिटेक्टर:</p>
+            <button onclick="getLiveLocation()" style="background: #f4511e; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                📍 GPS से लोकेशन प्राप्त करें
+            </button>
+            <p id="status" style="margin-top:8px; font-size:13px; color:#555;">बटन दबाएं या ब्राउज़र में लोकेशन की अनुमति दें...</p>
+            
+            <div style="margin-top: 10px;">
+                <label style="font-size: 12px; font-weight: bold;">ऑटो डिटेक्टेड एड्रेस:</label><br>
+                <textarea id="fetched_address" rows="3" style="width: 100%; border-radius: 5px; border: 1px solid #ccc; padding: 5px;" readonly></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 5px;">
+                <div><small>Latitude:</small> <input type="text" id="lat" style="width: 100%;" readonly></div>
+                <div><small>Longitude:</small> <input type="text" id="lng" style="width: 100%;" readonly></div>
+            </div>
+        </div>
+
+        <script>
+        function getLiveLocation() {
+            var status = document.getElementById('status');
+            if (navigator.geolocation) {
+                status.innerText = "लोकेशन फेच की जा रही है...";
+                navigator.geolocation.getCurrentPosition(showPosition, showError, {enableHighAccuracy: true});
+            } else {
+                status.innerText = "आपका डिवाइस जीपीएस सपोर्ट नहीं करता।";
+            }
+        }
+
+        function showPosition(position) {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+            document.getElementById('lat').value = lat;
+            document.getElementById('lng').value = lng;
+            
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.display_name) {
+                        document.getElementById('fetched_address').value = data.display_name;
+                        status.innerText = "✅ लोकेशन सफलतापूर्वक मिल गई!";
+                    } else {
+                        document.getElementById('fetched_address').value = "Lat: " + lat + ", Lng: " + lng;
+                        status.innerText = "Coordinates मिल गए हैं।";
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('fetched_address').value = "Lat: " + lat + ", Lng: " + lng;
+                    status.innerText = "एड्रेस नहीं मिला, लेकिन Coordinates दर्ज हो गए हैं।";
+                });
+        }
+
+        function showError(error) {
+            var status = document.getElementById('status');
+            status.innerText = "⚠️ लोकेशन एक्सेस अस्वीकृत या एरर: " + error.message;
+        }
+        
+        // Auto trigger on load
+        window.onload = getLiveLocation;
+        </script>
+        """
+
+        # HTML कॉम्पोनेंट को स्ट्रीमलिट में लोड करना
+        components.html(gps_html_code, height=270)
+
+        c_address = st.text_area("🏠 पूरा डिलीवरी का पता (Manual / Confirm Address) *", placeholder="ऊपर जीपीएस एड्रेस से देखकर या खुद से यहाँ पता लिखें...")
+        lat_input = st.text_input("🌐 Latitude (Optional)", value="23.2599")
+        lon_input = st.text_input("🌐 Longitude (Optional)", value="77.4126")
 
         if st.button("✨ Register & Submit"):
             if not all([c_name, c_userid, c_pass, c_mobile, c_address, c_unique]):
@@ -349,7 +420,6 @@ if not st.session_state.logged_in:
                         st.link_button("💬 Send Approval Request", create_whatsapp_link(MY_CONTACT, wa_text))
                 except sqlite3.IntegrityError:
                     st.error("⚠️ यह Username पहले से मौजूद है!")
-
     elif login_choice == "🔄 Reset Password":
         st.subheader("🔄 Reset Password")
         f_user = st.text_input("🆔 User ID")
