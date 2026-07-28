@@ -49,9 +49,9 @@ def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
 # ---------------------------------------------------------
-# 3. Database Initialization (Multi-Tier Category Structure)
+# 3. Database Initialization
 # ---------------------------------------------------------
-DB_FILE = 'nika_clients_v6.db'
+DB_FILE = 'nika_clients_v7.db'
 
 def get_db_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -412,16 +412,17 @@ else:
         if choice == "📂 Categories & Items Management":
             st.subheader("🏬 श्रेणी, उप-श्रेणी (Sub-Category) एवं सामान (Items) प्रबंधित करें")
             
-            tab_main, tab_sub, tab_item, tab_view = st.tabs([
-                "1️⃣ Main Category जोड़ें/हटाएं", 
-                "2️⃣ Sub-Category जोड़ें/हटाएं", 
-                "3️⃣ Item / सामान जोड़ें", 
+            tab_main, tab_sub, tab_item, tab_excel, tab_view = st.tabs([
+                "1️⃣ Main Category जोड़ें", 
+                "2️⃣ Sub-Category जोड़ें", 
+                "3️⃣ Single Item जोड़ें", 
+                "4️⃣ Excel/CSV से Import करें 📊",
                 "📋 सभी Items की लिस्ट"
             ])
 
-            # 1. Main Category Management
+            # 1. Main Category
             with tab_main:
-                st.write("### 1️⃣ Main Category जोड़ें (उदा: किराना, बेकरी)")
+                st.write("### 1️⃣ Main Category जोड़ें")
                 new_cat = st.text_input("नई Main Category का नाम लिखें:")
                 if st.button("➕ Main Category सहेजें"):
                     if new_cat.strip():
@@ -434,29 +435,16 @@ else:
                                 st.rerun()
                         except sqlite3.IntegrityError:
                             st.error("⚠️ यह Main Category पहले से मौजूद है!")
-                
-                st.markdown("---")
-                st.write("#### 🗑️ Main Category हटाएं")
-                existing_mains = get_main_categories()
-                if existing_mains:
-                    del_m_cat = st.selectbox("हटाने के लिए Main Category चुनें:", existing_mains, key="del_m_cat")
-                    if st.button("❌ Main Category डिलीट करें"):
-                        with get_db_connection() as conn:
-                            c = conn.cursor()
-                            c.execute("DELETE FROM categories WHERE category_name = ?", (del_m_cat,))
-                            conn.commit()
-                            st.success(f"Category '{del_m_cat}' डिलीट कर दी गई!")
-                            st.rerun()
 
-            # 2. Sub Category Management (DYNAMIC ADD/DELETE)
+            # 2. Sub Category
             with tab_sub:
-                st.write("### 2️⃣ अपनी पसंद की Sub-Category (उप-श्रेणी) जोड़ें")
+                st.write("### 2️⃣ Sub-Category (उप-श्रेणी) जोड़ें")
                 main_cats = get_main_categories()
                 if not main_cats:
                     st.warning("पहले कम से कम एक Main Category बनाएं!")
                 else:
                     sel_main = st.selectbox("किस Main Category के अंदर Sub-Category जोड़नी है?", main_cats, key="sub_main_sel")
-                    new_sub_name = st.text_input("Sub-Category का नाम लिखें (उदा: दाल, तेल, मसाले, साबुन, ड्राई फ्रूट्स):", placeholder="उदा: दाल / Pulses")
+                    new_sub_name = st.text_input("Sub-Category का नाम लिखें:")
                     
                     if st.button("➕ Sub-Category सहेजें"):
                         if new_sub_name.strip():
@@ -469,25 +457,9 @@ else:
                                 st.success(f"✅ Sub-Category '{new_sub_name.strip()}' को '{sel_main}' में जोड़ दिया गया!")
                                 st.rerun()
 
-                    st.markdown("---")
-                    st.write("#### 📋 मौजूद Sub-Categories की सूची")
-                    current_subs = get_subcategories_by_main(sel_main)
-                    st.write(f"**'{sel_main}' के अंदर मौजूद उप-श्रेणियां:**")
-                    st.write(current_subs)
-
-                    if current_subs and current_subs != ["सामान्य"]:
-                        del_sub_item = st.selectbox("डिलीट करने के लिए Sub-Category चुनें:", current_subs, key="del_sub_sel")
-                        if st.button("❌ Sub-Category डिलीट करें"):
-                            with get_db_connection() as conn:
-                                c = conn.cursor()
-                                c.execute("DELETE FROM subcategories WHERE sub_category_name = ?", (del_sub_item,))
-                                conn.commit()
-                                st.success(f"Sub-Category '{del_sub_item}' डिलीट कर दी गई!")
-                                st.rerun()
-
-            # 3. Add Item
+            # 3. Add Single Item
             with tab_item:
-                st.write("### 3️⃣ Item / सामान जोड़ें")
+                st.write("### 3️⃣ सिंगल सामान (Item) जोड़ें")
                 main_cats = get_main_categories()
                 if not main_cats:
                     st.warning("पहले Main Category और Sub-Category बनाएं!")
@@ -500,7 +472,7 @@ else:
                     with col2:
                         i_sub = st.selectbox("Sub-Category चुनें:", sub_list, key="item_sub_sel")
 
-                    i_name = st.text_input("सामान का नाम (Item Name):", placeholder="उदा: अरहर दाल 1kg, फॉर्च्यून सरसों तेल 1Ltr")
+                    i_name = st.text_input("सामान का नाम (Item Name):")
                     col_u, col_p = st.columns(2)
                     with col_u:
                         i_unit = st.selectbox("इकाई (Unit):", ["Kg", "Gram", "Ltr", "Packet", "Pc / Piece", "Box", "Meter"])
@@ -517,7 +489,75 @@ else:
                                 st.success(f"✅ '{i_name.strip()}' सफलतापूर्वक जोड़ा गया!")
                                 st.rerun()
 
-            # 4. View & Manage Items List
+            # 4. EXCEL / CSV BULK IMPORT (न्यू फीचर 🚀)
+            with tab_excel:
+                st.write("### 📊 Excel या CSV फ़ाइल से एक साथ सामान व रेट अपलोड करें")
+                st.info("आप एक ही बार में अपनी Excel फ़ाइल अपलोड करके सैकड़ों सामान जोड़ सकते हैं।")
+                
+                # Sample Download Button
+                sample_df = pd.DataFrame([
+                    {"category": "किराना", "sub_category": "दाल", "service_name": "अरहर दाल (Tur Dal)", "unit": "Kg", "price_rate": 160.0},
+                    {"category": "किराना", "sub_category": "तेल", "service_name": "सरसों तेल (Mustard Oil)", "unit": "Ltr", "price_rate": 145.0},
+                    {"category": "किराना", "sub_category": "मसाले", "service_name": "हल्दी पाउडर 100g", "unit": "Packet", "price_rate": 35.0}
+                ])
+                csv_sample = sample_df.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Sample Excel/CSV Template डाउनलोड करें", csv_sample, "nika_items_template.csv", "text/csv")
+                
+                st.markdown("---")
+                uploaded_file = st.file_uploader("📂 अपनी Excel (.xlsx) या CSV (.csv) फ़ाइल चुनें", type=["csv", "xlsx"])
+
+                if uploaded_file is not None:
+                    try:
+                        if uploaded_file.name.endswith('.csv'):
+                            df_upload = pd.read_csv(uploaded_file)
+                        else:
+                            df_upload = pd.read_excel(uploaded_file)
+
+                        st.write("👀 Uploaded Data Preview:")
+                        st.dataframe(df_upload.head(10), use_container_width=True)
+
+                        req_cols = {'category', 'sub_category', 'service_name', 'unit', 'price_rate'}
+                        if not req_cols.issubset(set(df_upload.columns)):
+                            st.error(f"❌ फ़ाइल में आवश्यक Columns नहीं हैं! आवश्यक Columns: {', '.join(req_cols)}")
+                        else:
+                            if st.button("🚀 डेटाबेस में Import करें"):
+                                success_count = 0
+                                with get_db_connection() as conn:
+                                    c = conn.cursor()
+                                    for idx, row in df_upload.iterrows():
+                                        cat = str(row['category']).strip()
+                                        sub_cat = str(row['sub_category']).strip()
+                                        s_name = str(row['service_name']).strip()
+                                        unit = str(row['unit']).strip()
+                                        rate = float(row['price_rate'])
+
+                                        # Auto-add Main Category if not exists
+                                        c.execute("INSERT OR IGNORE INTO categories (category_name) VALUES (?)", (cat,))
+                                        
+                                        # Get Category ID
+                                        c.execute("SELECT id FROM categories WHERE category_name = ?", (cat,))
+                                        m_id = c.fetchone()[0]
+
+                                        # Auto-add Sub-Category if not exists
+                                        c.execute("SELECT id FROM subcategories WHERE main_category_id = ? AND sub_category_name = ?", (m_id, sub_cat))
+                                        if not c.fetchone():
+                                            c.execute("INSERT INTO subcategories (main_category_id, sub_category_name) VALUES (?, ?)", (m_id, sub_cat))
+
+                                        # Add Item
+                                        c.execute("""
+                                            INSERT INTO services (category, sub_category, service_name, unit, price_rate)
+                                            VALUES (?, ?, ?, ?, ?)
+                                        """, (cat, sub_cat, s_name, unit, rate))
+                                        success_count += 1
+                                    
+                                    conn.commit()
+                                st.success(f"🎉 बधाई हो! कुल **{success_count}** सामान सफलतापूर्वक अपलोड हो गए!")
+                                st.rerun()
+
+                    except Exception as e:
+                        st.error(f"⚠️ फ़ाइल पढ़ने में त्रुटि: {str(e)}")
+
+            # 5. View & Manage Items List
             with tab_view:
                 st.write("### 📋 स्टोर के सभी सामान की सूची")
                 filter_main = st.selectbox("Main Category के अनुसार देखें:", ["सभी"] + get_main_categories())
@@ -625,17 +665,14 @@ else:
             if not main_cats:
                 st.warning("कोई Category उपलब्ध नहीं है।")
             else:
-                # 1. Main Category Dropdown
                 col_m, col_s = st.columns(2)
                 with col_m:
                     sel_main_cat = st.selectbox("1️⃣ Main Category चुनें (उदा: किराना):", main_cats)
 
-                # 2. Sub-Category Dropdown (Dynamically Loaded based on Main Category)
                 sub_cats = get_subcategories_by_main(sel_main_cat)
                 with col_s:
                     sel_sub_cat = st.selectbox("2️⃣ Sub-Category (उप-श्रेणी) चुनें:", ["सभी Sub-Categories"] + sub_cats)
 
-                # Fetch items dynamically
                 with get_db_connection() as conn:
                     c = conn.cursor()
                     if sel_sub_cat == "सभी Sub-Categories":
@@ -644,7 +681,6 @@ else:
                         c.execute("SELECT id, service_name, unit, price_rate, sub_category FROM services WHERE is_active = 1 AND category = ? AND sub_category = ?", (sel_main_cat, sel_sub_cat))
                     cat_items = c.fetchall()
 
-                # 3. Item Selection Dropdown
                 if not cat_items:
                     st.info("⚠️ इस उप-श्रेणी में अभी कोई सामान नहीं जोड़ा गया है।")
                 else:
