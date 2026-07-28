@@ -51,7 +51,7 @@ def check_hashes(password, hashed_text):
 # ---------------------------------------------------------
 # 3. Database Initialization
 # ---------------------------------------------------------
-DB_FILE = 'nika_clients_v7.db'
+DB_FILE = 'nika_clients_v8.db'
 
 def get_db_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -60,11 +60,12 @@ def init_db():
     with get_db_connection() as conn:
         c = conn.cursor()
         
-        # User Table
+        # User Table (Note: plain_pass stores password for Admin view)
         c.execute('''CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
                         password TEXT,
+                        plain_pass TEXT,
                         role TEXT,
                         client_id INTEGER,
                         is_approved INTEGER DEFAULT 1)''')
@@ -84,12 +85,12 @@ def init_db():
                         latitude TEXT,
                         longitude TEXT)''')
 
-        # Main Categories Table
+        # Categories
         c.execute('''CREATE TABLE IF NOT EXISTS categories (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         category_name TEXT UNIQUE)''')
 
-        # Dynamic Sub-Categories Table
+        # Sub-Categories
         c.execute('''CREATE TABLE IF NOT EXISTS subcategories (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         main_category_id INTEGER,
@@ -132,33 +133,17 @@ def init_db():
                         remarks TEXT,
                         FOREIGN KEY(client_id) REFERENCES clients(id))''')
 
-        # Admin Settings Table
+        # Admin Settings
         c.execute('''CREATE TABLE IF NOT EXISTS admin_settings (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         setting_key TEXT UNIQUE,
                         setting_value TEXT)''')
 
-        # Seed Default Main Categories
-        default_cats = ["किराना (Kirana)", "डेयरी एवं स्नैक्स", "व्यक्तिगत देखभाल (Personal Care)"]
-        for cat in default_cats:
-            c.execute("INSERT OR IGNORE INTO categories (category_name) VALUES (?)", (cat,))
-
-        # Seed Default Sub-Categories for Kirana
-        c.execute("SELECT id FROM categories WHERE category_name = 'किराना (Kirana)'")
-        kirana_res = c.fetchone()
-        if kirana_res:
-            k_id = kirana_res[0]
-            default_subs = ["दाल (Pulses)", "तेल और घी (Edible Oils)", "मसाले और नमक (Spices)", "अनाज और आटा (Flour)"]
-            for sub in default_subs:
-                c.execute("SELECT id FROM subcategories WHERE main_category_id = ? AND sub_category_name = ?", (k_id, sub))
-                if not c.fetchone():
-                    c.execute("INSERT INTO subcategories (main_category_id, sub_category_name) VALUES (?, ?)", (k_id, sub))
-
         # Seed Default Admin User
         c.execute("SELECT id FROM users WHERE username = 'admin'")
         if not c.fetchone():
-            c.execute("INSERT INTO users (username, password, role, is_approved) VALUES (?, ?, ?, ?)",
-                      ('admin', make_hashes('admin123'), 'Admin', 1))
+            c.execute("INSERT INTO users (username, password, plain_pass, role, is_approved) VALUES (?, ?, ?, ?, ?)",
+                      ('admin', make_hashes('admin123'), 'admin123', 'Admin', 1))
         conn.commit()
 
 init_db()
@@ -355,8 +340,8 @@ if not st.session_state.logged_in:
                         """, (c_unique.upper(), c_name, c_father, c_mobile, c_address, today, lat_input, lon_input))
                         
                         new_client_id = c.lastrowid
-                        c.execute("INSERT INTO users (username, password, role, client_id, is_approved) VALUES (?, ?, 'Customer', ?, 0)",
-                                  (c_userid, make_hashes(c_pass), new_client_id))
+                        c.execute("INSERT INTO users (username, password, plain_pass, role, client_id, is_approved) VALUES (?, ?, ?, 'Customer', ?, 0)",
+                                  (c_userid, make_hashes(c_pass), c_pass, new_client_id))
                         conn.commit()
                         st.success(f"✅ रजिस्ट्रेशन सफल हुआ! आपकी यूनिक आईडी: **{c_unique.upper()}**")
                         
@@ -382,7 +367,7 @@ if not st.session_state.logged_in:
                 ''', (f_user,))
                 r = c.fetchone()
                 if r and r[1] == f_mobile and str(r[2]).upper() == f_unique.upper():
-                    c.execute("UPDATE users SET password = ? WHERE username = ?", (make_hashes(new_pass), f_user))
+                    c.execute("UPDATE users SET password = ?, plain_pass = ? WHERE username = ?", (make_hashes(new_pass), new_pass, f_user))
                     conn.commit()
                     st.success("✅ पासवर्ड सफलतापूर्वक बदल दिया गया!")
                 else:
@@ -404,7 +389,7 @@ else:
         choice = st.sidebar.radio("📌 Admin Menu", [
             "📂 Categories & Items Management", 
             "📦 Customer Orders", 
-            "⚙️ Manage Customers", 
+            "👑 Manage Customers (Full Access)", 
             "👥 Approve Users", 
             "🖼️ Branding & Settings"
         ])
@@ -420,7 +405,6 @@ else:
                 "📋 सभी Items की लिस्ट"
             ])
 
-            # 1. Main Category
             with tab_main:
                 st.write("### 1️⃣ Main Category जोड़ें")
                 new_cat = st.text_input("नई Main Category का नाम लिखें:")
@@ -436,7 +420,6 @@ else:
                         except sqlite3.IntegrityError:
                             st.error("⚠️ यह Main Category पहले से मौजूद है!")
 
-            # 2. Sub Category
             with tab_sub:
                 st.write("### 2️⃣ Sub-Category (उप-श्रेणी) जोड़ें")
                 main_cats = get_main_categories()
@@ -457,7 +440,6 @@ else:
                                 st.success(f"✅ Sub-Category '{new_sub_name.strip()}' को '{sel_main}' में जोड़ दिया गया!")
                                 st.rerun()
 
-            # 3. Add Single Item
             with tab_item:
                 st.write("### 3️⃣ सिंगल सामान (Item) जोड़ें")
                 main_cats = get_main_categories()
@@ -489,16 +471,11 @@ else:
                                 st.success(f"✅ '{i_name.strip()}' सफलतापूर्वक जोड़ा गया!")
                                 st.rerun()
 
-            # 4. EXCEL / CSV BULK IMPORT (न्यू फीचर 🚀)
             with tab_excel:
                 st.write("### 📊 Excel या CSV फ़ाइल से एक साथ सामान व रेट अपलोड करें")
-                st.info("आप एक ही बार में अपनी Excel फ़ाइल अपलोड करके सैकड़ों सामान जोड़ सकते हैं।")
-                
-                # Sample Download Button
                 sample_df = pd.DataFrame([
                     {"category": "किराना", "sub_category": "दाल", "service_name": "अरहर दाल (Tur Dal)", "unit": "Kg", "price_rate": 160.0},
-                    {"category": "किराना", "sub_category": "तेल", "service_name": "सरसों तेल (Mustard Oil)", "unit": "Ltr", "price_rate": 145.0},
-                    {"category": "किराना", "sub_category": "मसाले", "service_name": "हल्दी पाउडर 100g", "unit": "Packet", "price_rate": 35.0}
+                    {"category": "किराना", "sub_category": "तेल", "service_name": "सरसों तेल (Mustard Oil)", "unit": "Ltr", "price_rate": 145.0}
                 ])
                 csv_sample = sample_df.to_csv(index=False).encode('utf-8')
                 st.download_button("📥 Sample Excel/CSV Template डाउनलोड करें", csv_sample, "nika_items_template.csv", "text/csv")
@@ -518,7 +495,7 @@ else:
 
                         req_cols = {'category', 'sub_category', 'service_name', 'unit', 'price_rate'}
                         if not req_cols.issubset(set(df_upload.columns)):
-                            st.error(f"❌ फ़ाइल में आवश्यक Columns नहीं हैं! आवश्यक Columns: {', '.join(req_cols)}")
+                            st.error(f"❌ फ़ाइल में आवश्यक Columns नहीं हैं!")
                         else:
                             if st.button("🚀 डेटाबेस में Import करें"):
                                 success_count = 0
@@ -531,33 +508,25 @@ else:
                                         unit = str(row['unit']).strip()
                                         rate = float(row['price_rate'])
 
-                                        # Auto-add Main Category if not exists
                                         c.execute("INSERT OR IGNORE INTO categories (category_name) VALUES (?)", (cat,))
-                                        
-                                        # Get Category ID
                                         c.execute("SELECT id FROM categories WHERE category_name = ?", (cat,))
                                         m_id = c.fetchone()[0]
 
-                                        # Auto-add Sub-Category if not exists
                                         c.execute("SELECT id FROM subcategories WHERE main_category_id = ? AND sub_category_name = ?", (m_id, sub_cat))
                                         if not c.fetchone():
                                             c.execute("INSERT INTO subcategories (main_category_id, sub_category_name) VALUES (?, ?)", (m_id, sub_cat))
 
-                                        # Add Item
-                                        c.execute("""
-                                            INSERT INTO services (category, sub_category, service_name, unit, price_rate)
-                                            VALUES (?, ?, ?, ?, ?)
-                                        """, (cat, sub_cat, s_name, unit, rate))
+                                        c.execute("INSERT INTO services (category, sub_category, service_name, unit, price_rate) VALUES (?, ?, ?, ?, ?)",
+                                                  (cat, sub_cat, s_name, unit, rate))
                                         success_count += 1
                                     
                                     conn.commit()
-                                st.success(f"🎉 बधाई हो! कुल **{success_count}** सामान सफलतापूर्वक अपलोड हो गए!")
+                                st.success(f"🎉 कुल **{success_count}** सामान सफलतापूर्वक अपलोड हो गए!")
                                 st.rerun()
 
                     except Exception as e:
-                        st.error(f"⚠️ फ़ाइल पढ़ने में त्रुटि: {str(e)}")
+                        st.error(f"⚠️ त्रुटि: {str(e)}")
 
-            # 5. View & Manage Items List
             with tab_view:
                 st.write("### 📋 स्टोर के सभी सामान की सूची")
                 filter_main = st.selectbox("Main Category के अनुसार देखें:", ["सभी"] + get_main_categories())
@@ -568,15 +537,6 @@ else:
                         df_items = pd.read_sql_query("SELECT id as ID, category as 'Main Category', sub_category as 'Sub Category', service_name as 'Item Name', unit as 'Unit', price_rate as 'Rate (₹)' FROM services WHERE is_active = 1 AND category = ? ORDER BY sub_category, service_name", conn, params=(filter_main,))
                     
                     st.dataframe(df_items, use_container_width=True)
-                    
-                    if not df_items.empty:
-                        del_item_id = st.number_input("🗑️ सामान डिलीट करने के लिए Item ID डालें:", min_value=1, step=1)
-                        if st.button("❌ Item डिलीट करें"):
-                            c = conn.cursor()
-                            c.execute("UPDATE services SET is_active = 0 WHERE id = ?", (del_item_id,))
-                            conn.commit()
-                            st.success("Item डिलीट कर दिया गया!")
-                            st.rerun()
 
         elif choice == "📦 Customer Orders":
             st.subheader("📦 ग्राहकों के ऑर्डर्स")
@@ -596,14 +556,114 @@ else:
                         conn.commit()
                         st.success("Status Updated!")
                         st.rerun()
-                else:
-                    st.info("कोई आर्डर नहीं मिला।")
 
-        elif choice == "⚙️ Manage Customers":
-            st.subheader("⚙️ कस्टमर लिस्ट")
-            with get_db_connection() as conn:
-                df_clients = pd.read_sql_query("SELECT id, unique_client_id, name, mobile, address FROM clients", conn)
-                st.dataframe(df_clients, use_container_width=True)
+        # ==================== FULL ACCESS CUSTOMER MANAGEMENT ====================
+        elif choice == "👑 Manage Customers (Full Access)":
+            st.subheader("👑 ग्राहकों का पूर्ण एक्सेस (Full Customer Access)")
+            st.info("यहाँ आप ग्राहकों के User ID, Password देख सकते हैं और उसमें बदलाव कर सकते हैं।")
+
+            tab_view_cust, tab_edit_cust = st.tabs(["👁️ सभी ग्राहकों की पूरी जानकारी (User ID & Password)", "✏️ ग्राहक विवरण या Password बदलें"])
+
+            # 1. View All Details
+            with tab_view_cust:
+                with get_db_connection() as conn:
+                    df_full_cust = pd.read_sql_query('''
+                        SELECT 
+                            c.id as 'DB ID',
+                            c.unique_client_id as 'Client ID',
+                            c.name as 'Customer Name',
+                            c.mobile as 'Mobile',
+                            u.username as 'User ID',
+                            COALESCE(u.plain_pass, '****') as 'Password',
+                            c.address as 'Address',
+                            c.created_date as 'Registered Date',
+                            CASE WHEN u.is_approved = 1 THEN 'Approved' ELSE 'Pending' END as 'Status'
+                        FROM clients c
+                        JOIN users u ON c.id = u.client_id
+                        WHERE u.role = 'Customer'
+                        ORDER BY c.id DESC
+                    ''', conn)
+                    
+                    if not df_full_cust.empty:
+                        st.dataframe(df_full_cust, use_container_width=True)
+                    else:
+                        st.warning("कोई Customer नहीं मिला।")
+
+            # 2. Modify Credentials & Information
+            with tab_edit_cust:
+                st.write("### ✏️ किसी भी ग्राहक का Password या Detail अपडेट करें")
+                with get_db_connection() as conn:
+                    c = conn.cursor()
+                    c.execute('''
+                        SELECT c.id, c.name, u.username, c.unique_client_id 
+                        FROM clients c JOIN users u ON c.id = u.client_id 
+                        WHERE u.role = 'Customer'
+                    ''')
+                    cust_list = c.fetchall()
+
+                if not cust_list:
+                    st.warning("कोई Customer उपलब्ध नहीं है।")
+                else:
+                    cust_dict = {f"{item[1]} (User ID: {item[2]} | Client ID: {item[3]})": item[0] for item in cust_list}
+                    selected_cust_label = st.selectbox("🎯 ग्राहक चुनें जिसे अपडेट करना है:", list(cust_dict.keys()))
+                    selected_db_id = cust_dict[selected_cust_label]
+
+                    # Fetch current details
+                    with get_db_connection() as conn:
+                        c = conn.cursor()
+                        c.execute('''
+                            SELECT c.unique_client_id, c.name, c.mobile, c.address, u.username, u.plain_pass
+                            FROM clients c JOIN users u ON c.id = u.client_id
+                            WHERE c.id = ?
+                        ''', (selected_db_id,))
+                        cd = c.fetchone()
+
+                    st.markdown("---")
+                    col_e1, col_e2 = st.columns(2)
+                    with col_e1:
+                        e_uid = st.text_input("🆔 Unique Client ID:", value=cd[0])
+                        e_name = st.text_input("👤 Customer Name:", value=cd[1])
+                        e_mobile = st.text_input("📱 Mobile Number:", value=cd[2])
+                        e_address = st.text_area("🏠 Address:", value=cd[3])
+
+                    with col_e2:
+                        e_username = st.text_input("🧑‍💻 User ID (Login Username):", value=cd[4])
+                        e_pass = st.text_input("🔑 New Password (नया पासवर्ड सेट करें):", value=cd[5] if cd[5] else "")
+
+                    col_b1, col_b2 = st.columns(2)
+                    with col_b1:
+                        if st.button("💾 अपडेट करें (Save Changes)"):
+                            with get_db_connection() as conn:
+                                c = conn.cursor()
+                                # Update Client Table
+                                c.execute('''
+                                    UPDATE clients 
+                                    SET unique_client_id = ?, name = ?, mobile = ?, address = ? 
+                                    WHERE id = ?
+                                ''', (e_uid, e_name, e_mobile, e_address, selected_db_id))
+
+                                # Update User Table (Credentials)
+                                new_hash = make_hashes(e_pass)
+                                c.execute('''
+                                    UPDATE users 
+                                    SET username = ?, password = ?, plain_pass = ? 
+                                    WHERE client_id = ?
+                                ''', (e_username, new_hash, e_pass, selected_db_id))
+                                conn.commit()
+
+                                st.success(f"✅ Customer '{e_name}' की जानकारी और पासवर्ड सफलतापूर्वक अपडेट हो गए!")
+                                st.rerun()
+
+                    with col_b2:
+                        if st.button("🗑️ Customer डिलीट करें", type="primary"):
+                            with get_db_connection() as conn:
+                                c = conn.cursor()
+                                c.execute("DELETE FROM users WHERE client_id = ?", (selected_db_id,))
+                                c.execute("DELETE FROM clients WHERE id = ?", (selected_db_id,))
+                                c.execute("DELETE FROM cart_items WHERE client_id = ?", (selected_db_id,))
+                                conn.commit()
+                                st.success("❌ ग्राहक का पूरा खाता डिलीट कर दिया गया!")
+                                st.rerun()
 
         elif choice == "👥 Approve Users":
             st.subheader("👥 पेंडिंग अप्रूवल")
