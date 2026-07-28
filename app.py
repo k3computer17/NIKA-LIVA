@@ -46,7 +46,7 @@ def check_hashes(password, hashed_text):
     return make_hashes(password) == hashed_text
 
 # Database Setup
-DB_FILE = 'nika_clients_v2.db'
+DB_FILE = 'nika_clients_v3.db'
 
 def get_db_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -84,6 +84,7 @@ def init_db():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         category TEXT,
                         service_name TEXT,
+                        unit TEXT DEFAULT 'Pc',
                         price_rate REAL,
                         description TEXT,
                         is_active INTEGER DEFAULT 1)''')
@@ -104,16 +105,16 @@ def init_db():
                         setting_key TEXT UNIQUE,
                         setting_value TEXT)''')
 
-        # Default Categories Insert
+        # Default Categories
         default_categories = ["किराना (Grocery)", "कपड़ा प्रेस / ड्राई क्लीन", "टैक्स व अकाउंटिंग"]
         for cat in default_categories:
             c.execute("INSERT OR IGNORE INTO categories (category_name) VALUES (?)", (cat,))
 
         # Migrations
         for table, col, col_type in [
+            ("services", "unit", "TEXT DEFAULT 'Pc'"),
             ("orders", "order_status", "TEXT DEFAULT 'Pending'"),
             ("orders", "delivery_address", "TEXT"),
-            ("orders", "remarks", "TEXT"),
             ("users", "is_approved", "INTEGER DEFAULT 1"),
             ("clients", "unique_client_id", "TEXT"),
             ("clients", "latitude", "TEXT"),
@@ -414,23 +415,27 @@ else:
                         st.error("कृपया Category का सही नाम लिखें!")
 
             with tab_add_item:
-                st.write("### ➕ Item / Service रेट के साथ जोड़ें")
+                st.write("### ➕ Item / Service रेट और इकाई (Unit) के साथ जोड़ें")
                 if not categories_list:
                     st.warning("पहले कोई Category जोड़ें!")
                 else:
                     with st.form("service_form"):
                         s_cat = st.selectbox("📂 Category चुनें:", categories_list)
                         s_name = st.text_input("🏷️ Service / Item का नाम")
-                        s_price = st.number_input("💵 दर / Rate (₹):", min_value=0.0, step=10.0)
+                        col_u, col_p = st.columns(2)
+                        with col_u:
+                            s_unit = st.selectbox("📏 इकाई (Unit) चुनें:", ["Pc / Piece", "Kg", "Gram", "Ltr", "Packet", "Meter", "Hour", "Visit", "Job"])
+                        with col_p:
+                            s_price = st.number_input("💵 दर / Rate (₹):", min_value=0.0, step=10.0)
                         
                         if st.form_submit_button("💾 Item/Service जोड़े"):
                             if s_name.strip():
                                 with get_db_connection() as conn:
                                     c = conn.cursor()
-                                    c.execute("INSERT INTO services (category, service_name, price_rate) VALUES (?, ?, ?)", 
-                                              (s_cat, s_name.strip(), s_price))
+                                    c.execute("INSERT INTO services (category, service_name, unit, price_rate) VALUES (?, ?, ?, ?)", 
+                                              (s_cat, s_name.strip(), s_unit, s_price))
                                     conn.commit()
-                                    st.success(f"✅ Item '{s_name.strip()}' सफलतापूर्वक Category '{s_cat}' में जोड़ा गया!")
+                                    st.success(f"✅ Item '{s_name.strip()}' ({s_unit}) सफलतापूर्वक Category '{s_cat}' में जोड़ा गया!")
                                     st.rerun()
                             else:
                                 st.error("कृपया Item का नाम लिखें!")
@@ -441,9 +446,9 @@ else:
                 
                 with get_db_connection() as conn:
                     if filter_cat == "सभी Categories":
-                        df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Service / Item Name', price_rate as 'दर / Rate (₹)' FROM services WHERE is_active = 1 ORDER BY category ASC", conn)
+                        df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Item Name', unit as 'Unit (इकाई)', price_rate as 'Rate (₹)' FROM services WHERE is_active = 1 ORDER BY category ASC", conn)
                     else:
-                        df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Service / Item Name', price_rate as 'दर / Rate (₹)' FROM services WHERE is_active = 1 AND category = ? ORDER BY service_name ASC", conn, params=(filter_cat,))
+                        df_serv = pd.read_sql_query("SELECT id as ID, category as Category, service_name as 'Item Name', unit as 'Unit (इकाई)', price_rate as 'Rate (₹)' FROM services WHERE is_active = 1 AND category = ? ORDER BY service_name ASC", conn, params=(filter_cat,))
                     
                     st.dataframe(df_serv, use_container_width=True)
 
@@ -452,7 +457,7 @@ else:
             with get_db_connection() as conn:
                 df_orders = pd.read_sql_query('''
                     SELECT o.id as 'Order ID', COALESCE(c.unique_client_id, 'N/A') as 'Unique ID', COALESCE(c.name, 'N/A') as 'Customer Name',
-                           o.items_summary as 'Items (मात्रा व दर सहित)', o.total_price as 'Total (₹)', o.order_date as 'Date', o.order_status as 'Status'
+                           o.items_summary as 'Items Summary', o.total_price as 'Total (₹)', o.order_date as 'Date', o.order_status as 'Status'
                     FROM orders o LEFT JOIN clients c ON o.client_id = c.id ORDER BY o.id DESC
                 ''', conn)
                 if not df_orders.empty:
@@ -514,35 +519,37 @@ else:
         tab_order, tab_cart, tab_my_orders = st.tabs(["🛒 Browse & Add", "🛍️ My Cart", "📦 My Orders"])
 
         with tab_order:
-            st.subheader("🛍️ Select Category & Items")
+            st.subheader("🛍️ Category से Item चुनें")
             
             categories_list = get_categories()
             if not categories_list:
                 st.warning("अभी कोई Category उपलब्ध नहीं है।")
             else:
-                # 1. Category Selection First
-                selected_cat = st.selectbox("📂 1. सबसे पहले Category चुनें:", categories_list)
+                selected_cat = st.selectbox("📂 1. Category चुनें:", categories_list)
 
-                # 2. Fetch Items filtered by chosen category
                 with get_db_connection() as conn:
                     c = conn.cursor()
-                    c.execute("SELECT id, service_name, price_rate FROM services WHERE is_active = 1 AND category = ?", (selected_cat,))
+                    c.execute("SELECT id, service_name, unit, price_rate FROM services WHERE is_active = 1 AND category = ?", (selected_cat,))
                     cat_items = c.fetchall()
 
                 if not cat_items:
                     st.info(f"⚠️ Category '{selected_cat}' में कोई Item/Service उपलब्ध नहीं है।")
                 else:
-                    item_dict = {f"{item[1]} (दर: ₹{item[2]})": item for item in cat_items}
+                    item_dict = {f"{item[1]} (इकाई: {item[2] if item[2] else 'Pc'}, दर: ₹{item[3]})": item for item in cat_items}
                     
                     st.markdown("---")
-                    selected_item_label = st.selectbox(f"🏷️ 2. '{selected_cat}' से Item / Service चुनें:", list(item_dict.keys()))
+                    selected_item_label = st.selectbox(f"🏷️ 2. Item / Service चुनें:", list(item_dict.keys()))
                     chosen_item = item_dict[selected_item_label]
+                    
+                    item_unit = chosen_item[2] if chosen_item[2] else "Pc"
 
-                    col_q, col_r = st.columns(2)
-                    with col_q:
+                    c_qty, c_unit, c_rate = st.columns(3)
+                    with c_qty:
                         qty = st.number_input("🔢 मात्रा (Quantity):", min_value=1, value=1, step=1)
-                    with col_r:
-                        rate = st.number_input("💵 दर / Rate (₹):", value=float(chosen_item[2]), step=1.0)
+                    with c_unit:
+                        st.text_input("📏 इकाई (Unit):", value=item_unit, disabled=True)
+                    with c_rate:
+                        rate = st.number_input("💵 दर / Rate (₹):", value=float(chosen_item[3]), step=1.0)
                     
                     if st.button("➕ कार्ट में जोड़ें"):
                         item_total = qty * rate
@@ -550,26 +557,35 @@ else:
                             "id": chosen_item[0], 
                             "category": selected_cat, 
                             "name": chosen_item[1], 
+                            "unit": item_unit,
+                            "qty": qty,
                             "rate": rate, 
-                            "qty": qty, 
                             "total": item_total
                         })
                         st.success(f"✅ '{chosen_item[1]}' कार्ट में जुड़ गया!")
 
         with tab_cart:
-            st.subheader("🛍️ आपकी कार्ट")
+            st.subheader("🛍️ आपकी कार्ट (Cart Details)")
             if st.session_state.cart:
                 df_cart = pd.DataFrame(st.session_state.cart)
-                df_cart_display = df_cart[['category', 'name', 'rate', 'qty', 'total']]
-                df_cart_display.columns = ['Category', 'आइटम का नाम', 'दर (₹)', 'मात्रा (Qty)', 'कुल मूल्य (₹)']
+                
+                # Separate columns clearly
+                df_cart_display = df_cart[['category', 'name', 'unit', 'qty', 'rate', 'total']]
+                df_cart_display.columns = ['Category', 'Item Name (सामग्री का नाम)', 'Unit (इकाई)', 'Quantity (मात्रा)', 'Rate (₹)', 'Total Amount (₹)']
+                
                 st.dataframe(df_cart_display, use_container_width=True)
                 
                 grand_total = df_cart['total'].sum()
-                st.markdown(f"### 💵 कुल योग: **₹{grand_total:,.2f}**")
+                st.markdown(f"### 💵 कुल योग (Grand Total): **₹{grand_total:,.2f}**")
                 
                 del_addr = st.text_area("🏠 डिलिवरी पता:", value=c_addr)
                 if st.button("🚀 आर्डर फाइनल करें"):
-                    summary_str = ", ".join([f"[{i['category']}] {i['name']} (दर: ₹{i['rate']} × मात्रा: {i['qty']} = ₹{i['total']})" for i in st.session_state.cart])
+                    # Structured clear summary text
+                    summary_lines = []
+                    for i in st.session_state.cart:
+                        summary_lines.append(f"• {i['name']} | Qty: {i['qty']} {i['unit']} | Rate: ₹{i['rate']} | Total: ₹{i['total']}")
+                    
+                    summary_str = "\n".join(summary_lines)
                     today_dt = datetime.now().strftime("%Y-%m-%d %H:%M")
                     
                     with get_db_connection() as conn:
@@ -581,7 +597,7 @@ else:
                         conn.commit()
                     
                     st.success("🎉 ऑर्डर दर्ज हो गया!")
-                    bill_msg = f"🧾 *NIKA STORE BILL* 🧾\n👤 {c_name} ({c_uid})\n\n{summary_str}\n\n💰 *Grand Total: ₹{grand_total:,.2f}*\n🏠 {del_addr}"
+                    bill_msg = f"🧾 *NIKA STORE BILL* 🧾\n👤 *Customer:* {c_name} ({c_uid})\n📅 *Date:* {today_dt}\n\n*ITEMS DETAILS:*\n{summary_str}\n\n💰 *Grand Total: ₹{grand_total:,.2f}*\n🏠 *Address:* {del_addr}"
                     st.link_button("💬 व्हाट्सएप पर बिल भेजें", create_whatsapp_link(MY_CONTACT, bill_msg), use_container_width=True)
                     st.session_state.cart = []
             else:
@@ -590,7 +606,7 @@ else:
         with tab_my_orders:
             st.subheader("📦 मेरे ऑर्डर्स")
             with get_db_connection() as conn:
-                df_my = pd.read_sql_query("SELECT id as 'Order ID', items_summary as 'विवरण (मात्रा व दर)', total_price as 'Total (₹)', order_date as 'Date', order_status as 'Status' FROM orders WHERE client_id = ? ORDER BY id DESC", conn, params=(cid,))
+                df_my = pd.read_sql_query("SELECT id as 'Order ID', items_summary as 'Order Items (Item | Qty & Unit | Rate)', total_price as 'Total (₹)', order_date as 'Date', order_status as 'Status' FROM orders WHERE client_id = ? ORDER BY id DESC", conn, params=(cid,))
                 if not df_my.empty:
                     st.dataframe(df_my, use_container_width=True)
                 else:
