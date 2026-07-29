@@ -21,7 +21,7 @@ spreadsheet = "https://docs.google.com/spreadsheets/d/1Q2R0WaEC2WgiRWFkhOOevCRH0
 st.title("My App with Google Sheets")
 
 # Google Sheets Connection
-conn = st.connection("gsheets", type=GSheetsConnection)
+conn = st.connection("gsheets", spreadsheet = "https://docs.google.com/spreadsheets/d/1Q2R0WaEC2WgiRWFkhOOevCRH0Qv0YappRqCWEnHWZJk/edit")
 
 # Data Read Karein
 df = conn.read(worksheet="Sheet1")
