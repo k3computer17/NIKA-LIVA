@@ -15,20 +15,17 @@ MY_CONTACT = "919000000000" # आपका व्हाट्सएप नंब
 # =========================================================
 # 2. SUPABASE POSTGRESQL DATABASE CONNECTION
 # =========================================================
-# Streamlit secrets से Postgres URL पढ़ना
-try:
-    DB_URL = st.secrets["postgres"]["url"]
-    engine = create_engine(DB_URL, pool_pre_ping=True)
-except Exception as e:
-    st.error("⚠️ Database connection error! Please set Secrets correctly in Streamlit Settings.")
-    st.stop()
+import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
-def make_hashes(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
+st.title("My App with Google Sheets")
 
-def verify_hashes(password, hashed_text):
-    return make_hashes(password) == hashed_text
+# Google Sheets Connection
+conn = st.connection("gsheets", type=GSheetsConnection)
 
+# Data Read Karein
+df = conn.read(worksheet="Sheet1")
+st.dataframe(df)
 # =========================================================
 # 3. INITIALIZE CLOUD DATABASE TABLES
 # =========================================================
