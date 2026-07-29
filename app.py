@@ -16,7 +16,7 @@ MY_CONTACT = "919000000000" # आपका व्हाट्सएप नंब
 # 2. SUPABASE POSTGRESQL DATABASE CONNECTION
 # =========================================================
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+spreadsheet = "https://docs.google.com/spreadsheets/d/1Q2R0WaEC2WgiRWFkhOOevCRH0Qv0YappRqCWEnHWZJk/edit"
 
 st.title("My App with Google Sheets")
 
