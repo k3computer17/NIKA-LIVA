@@ -7,9 +7,9 @@ from streamlit_gsheets import GSheetsConnection
 # =========================================================
 # 1. PAGE CONFIG & BRANDING
 # =========================================================
-st.set_page_config(page_title="NIKA Multi-Service & Grocery Portal", page_icon="🛍️", layout="wide")
+st.set_page_config(page_title="NIKA Grocery Portal & Multi-Service ", page_icon="🛍️", layout="orange")
 
-MY_CONTACT = "919000000000"  # Aapka WhatsApp Number
+MY_CONTACT = "8358013017"  # Aapka WhatsApp Number
 
 # =========================================================
 # 2. GOOGLE SHEETS CONNECTION & HELPER FUNCTIONS
