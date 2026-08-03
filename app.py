@@ -15,6 +15,7 @@ st.set_page_config(
 )
 
 MY_CONTACT = "8358013017"  # Admin WhatsApp Number
+GSHEET_URL = "https://docs.google.com/spreadsheets/d/1GXHT4rDTIu7KghR29PkA0S9AfXTE0mgcKVghTxF63bg/edit?usp=sharing"
 
 # =========================================================
 # 2. GOOGLE SHEETS CONNECTION & HELPER FUNCTIONS
@@ -22,12 +23,12 @@ MY_CONTACT = "8358013017"  # Admin WhatsApp Number
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error("Google Sheets Connection Error! कृपया Streamlit Secrets (.streamlit/secrets.toml) में GSheets सेटिंग्स जांचें।")
+    st.error("Google Sheets Connection Error! Kripya Streamlit Settings me Secrets check karein.")
 
 def load_sheet(sheet_name):
     """Read data from Google Sheets safely"""
     try:
-        df = conn.read(worksheet=sheet_name, ttl=0)
+        df = conn.read(spreadsheet=GSHEET_URL, worksheet=sheet_name, ttl=0)
         return df if df is not None else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
@@ -35,9 +36,9 @@ def load_sheet(sheet_name):
 def save_sheet(sheet_name, df):
     """Write/Update data in Google Sheets"""
     try:
-        conn.update(worksheet=sheet_name, data=df)
+        conn.update(spreadsheet=GSHEET_URL, worksheet=sheet_name, data=df)
     except Exception as e:
-        st.error(f"शीट अपडेट करने में त्रुटि: {e}")
+        st.error(f"डेटा अपडेट करने में समस्या आई: {e}")
 
 def create_whatsapp_link(mobile, text_msg):
     """Generate a valid WhatsApp link with pre-filled text"""
@@ -72,13 +73,17 @@ orders_df = load_sheet("Orders")
 # 4. LOGIN & NEW REGISTRATION (UNAUTHENTICATED)
 # =========================================================
 if not st.session_state['logged_in']:
-    auth_tabs = st.tabs(["👤 Customer Login", "🔐 Admin Login", "📝 New Customer Registration"])
-    
+    tab_user_login, tab_admin_login, reg_tab = st.tabs([
+        "👤 Customer Login", 
+        "🔐 Admin Login", 
+        "📝 New Registration"
+    ])
+
     # ---------------- CUSTOMER LOGIN TAB ----------------
-    with auth_tabs[0]:
+    with tab_user_login:
         st.subheader("👤 कस्टमर लॉगिन")
         c_username = st.text_input("Customer User ID", key="c_login_user")
-        c_password = st.text_input("Password", type="password", key="c_login_pass")
+        c_password = st.text_input("Customer Password", type="password", key="c_login_pass")
         
         if st.button("🚀 Customer Login", key="c_login_btn"):
             if not users_df.empty:
@@ -97,15 +102,15 @@ if not st.session_state['logged_in']:
                     else:
                         st.warning("⚠️ आपका खाता अभी स्वीकृत (Approved) नहीं हुआ है। कृपया एडमिन से संपर्क करें।")
                 else:
-                    st.error("❌ गलत User ID या Password!")
+                    st.error("❌ गलत Customer Username या Password!")
             else:
                 st.error("❌ Users sheet में कोई डेटा नहीं मिला!")
 
     # ---------------- ADMIN LOGIN TAB ----------------
-    with auth_tabs[1]:
+    with tab_admin_login:
         st.subheader("🔐 एडमिन लॉगिन")
         a_username = st.text_input("Admin User ID", key="a_login_user")
-        a_password = st.text_input("Password", type="password", key="a_login_pass")
+        a_password = st.text_input("Admin Password", type="password", key="a_login_pass")
         
         if st.button("👑 Admin Login", key="a_login_btn"):
             if not users_df.empty:
@@ -121,12 +126,12 @@ if not st.session_state['logged_in']:
                     st.success("✅ एडमिन लॉगिन सफल हुआ!")
                     st.rerun()
                 else:
-                    st.error("❌ अमान्य Admin प्रमाण-पत्र (Credentials)!")
+                    st.error("❌ गलत Admin Username या Password!")
             else:
                 st.error("❌ Users sheet में कोई डेटा नहीं मिला!")
 
     # ---------------- NEW REGISTRATION TAB ----------------
-    with auth_tabs[2]:
+    with reg_tab:
         st.subheader("📝 नया कस्टमर रजिस्ट्रेशन (Live GPS)")
         auto_id = generate_auto_client_id(clients_df)
         
@@ -245,7 +250,6 @@ if not st.session_state['logged_in']:
 # 5. AUTHENTICATED USER PORTAL
 # =========================================================
 else:
-    # Sidebar Header
     st.sidebar.write(f"Logged in as: **{st.session_state['user_info']['username']}** ({st.session_state['user_info']['role']})")
     if st.sidebar.button("🚪 Logout"):
         st.session_state['logged_in'] = False
@@ -376,8 +380,6 @@ else:
                                 st.rerun()
                 else:
                     st.info("कोई पेंडिंग रिक्वेस्ट नहीं है।")
-            else:
-                st.info("कोई डेटा उपलब्ध नहीं है।")
 
         # ------------ ADMIN: MANAGE ORDERS ------------
         elif admin_choice == "📦 Manage Orders":
