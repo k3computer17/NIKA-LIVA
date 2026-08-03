@@ -22,7 +22,7 @@ MY_CONTACT = "8358013017"  # Admin WhatsApp Number
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error("Google Sheets Connection Error! Kripya Streamlit Settings me Secrets check karein.")
+    st.error("Google Sheets Connection Error! कृपया Streamlit Secrets (.streamlit/secrets.toml) में GSheets सेटिंग्स जांचें।")
 
 def load_sheet(sheet_name):
     """Read data from Google Sheets safely"""
@@ -34,7 +34,10 @@ def load_sheet(sheet_name):
 
 def save_sheet(sheet_name, df):
     """Write/Update data in Google Sheets"""
-    conn.update(worksheet=sheet_name, data=df)
+    try:
+        conn.update(worksheet=sheet_name, data=df)
+    except Exception as e:
+        st.error(f"शीट अपडेट करने में त्रुटि: {e}")
 
 def create_whatsapp_link(mobile, text_msg):
     """Generate a valid WhatsApp link with pre-filled text"""
@@ -58,7 +61,7 @@ if 'cart' not in st.session_state:
 st.title("🛍️ NIKA Multi-Service & Grocery Portal")
 
 # Load Worksheets Data
-users_df = load_sheet("Users")
+users_df = load_sheet("users")
 clients_df = load_sheet("Clients")
 categories_df = load_sheet("Categories")
 subcategories_df = load_sheet("Subcategories")
@@ -69,33 +72,61 @@ orders_df = load_sheet("Orders")
 # 4. LOGIN & NEW REGISTRATION (UNAUTHENTICATED)
 # =========================================================
 if not st.session_state['logged_in']:
-    login_tab, reg_tab = st.tabs(["🔐 Login", "📝 New Registration"])
-
-    # ---------------- LOGIN TAB ----------------
-    with login_tab:
-        st.subheader("कस्टमर / एडमिन लॉगिन")
-        username = st.text_input("User ID")
-        password = st.text_input("Password", type="password")
+    auth_tabs = st.tabs(["👤 Customer Login", "🔐 Admin Login", "📝 New Customer Registration"])
+    
+    # ---------------- CUSTOMER LOGIN TAB ----------------
+    with auth_tabs[0]:
+        st.subheader("👤 कस्टमर लॉगिन")
+        c_username = st.text_input("Customer User ID", key="c_login_user")
+        c_password = st.text_input("Password", type="password", key="c_login_pass")
         
-        if st.button("🚀 Login"):
+        if st.button("🚀 Customer Login", key="c_login_btn"):
             if not users_df.empty:
-                user_match = users_df[(users_df['username'].astype(str) == username) & (users_df['password'].astype(str) == password)]
+                user_match = users_df[
+                    (users_df['username'].astype(str) == c_username) & 
+                    (users_df['password'].astype(str) == c_password) & 
+                    (users_df['role'].astype(str) == "Customer")
+                ]
                 if not user_match.empty:
                     user_row = user_match.iloc[0]
-                    if int(user_row['is_approved']) == 1:
+                    if int(user_row.get('is_approved', 0)) == 1:
                         st.session_state['logged_in'] = True
-                        st.session_state['user_info'] = user_row
-                        st.success("✅ लॉगिन सफल हुआ!")
+                        st.session_state['user_info'] = user_row.to_dict()
+                        st.success("✅ कस्टमर लॉगिन सफल हुआ!")
                         st.rerun()
                     else:
                         st.warning("⚠️ आपका खाता अभी स्वीकृत (Approved) नहीं हुआ है। कृपया एडमिन से संपर्क करें।")
                 else:
-                    st.error("❌ गलत Username या Password!")
+                    st.error("❌ गलत User ID या Password!")
             else:
-                st.error("❌ Users sheet में कोई डाटा नहीं मिला!")
+                st.error("❌ Users sheet में कोई डेटा नहीं मिला!")
+
+    # ---------------- ADMIN LOGIN TAB ----------------
+    with auth_tabs[1]:
+        st.subheader("🔐 एडमिन लॉगिन")
+        a_username = st.text_input("Admin User ID", key="a_login_user")
+        a_password = st.text_input("Password", type="password", key="a_login_pass")
+        
+        if st.button("👑 Admin Login", key="a_login_btn"):
+            if not users_df.empty:
+                user_match = users_df[
+                    (users_df['username'].astype(str) == a_username) & 
+                    (users_df['password'].astype(str) == a_password) & 
+                    (users_df['role'].astype(str) == "Admin")
+                ]
+                if not user_match.empty:
+                    user_row = user_match.iloc[0]
+                    st.session_state['logged_in'] = True
+                    st.session_state['user_info'] = user_row.to_dict()
+                    st.success("✅ एडमिन लॉगिन सफल हुआ!")
+                    st.rerun()
+                else:
+                    st.error("❌ अमान्य Admin प्रमाण-पत्र (Credentials)!")
+            else:
+                st.error("❌ Users sheet में कोई डेटा नहीं मिला!")
 
     # ---------------- NEW REGISTRATION TAB ----------------
-    with reg_tab:
+    with auth_tabs[2]:
         st.subheader("📝 नया कस्टमर रजिस्ट्रेशन (Live GPS)")
         auto_id = generate_auto_client_id(clients_df)
         
@@ -204,7 +235,7 @@ if not st.session_state['logged_in']:
                     "is_approved": 0
                 }
                 updated_users = pd.concat([users_df, pd.DataFrame([new_user])], ignore_index=True)
-                save_sheet("Users", updated_users)
+                save_sheet("users", updated_users)
 
                 st.success(f"✅ रजिस्ट्रेशन सफल हुआ! आपकी यूनिक ID है: **{auto_id}**")
                 wa_msg = f"नमस्ते एडमिन, नया यूजर रजिस्टर हुआ है:\nनाम: {c_name}\nयूजर ID: {c_userid}\nClient ID: {auto_id}"
@@ -255,7 +286,7 @@ else:
 
             with t2:
                 st.subheader("नई उप-श्रेणी (Sub-Category) जोड़ें")
-                cat_list = categories_df['category_name'].tolist() if not categories_df.empty else []
+                cat_list = categories_df['category_name'].tolist() if not categories_df.empty and 'category_name' in categories_df.columns else []
 
                 if cat_list:
                     with st.form("add_subcat_form", clear_on_submit=True):
@@ -281,11 +312,11 @@ else:
 
             with t3:
                 st.subheader("नया आइटम/सामान जोड़ें")
-                cats = categories_df['category_name'].tolist() if not categories_df.empty else []
+                cats = categories_df['category_name'].tolist() if not categories_df.empty and 'category_name' in categories_df.columns else []
 
                 if cats:
                     sel_item_cat = st.selectbox("Category", cats, key="item_cat")
-                    subcats_filtered = subcategories_df[subcategories_df['category_name'] == sel_item_cat]['sub_category_name'].tolist() if not subcategories_df.empty else []
+                    subcats_filtered = subcategories_df[subcategories_df['category_name'] == sel_item_cat]['sub_category_name'].tolist() if not subcategories_df.empty and 'sub_category_name' in subcategories_df.columns else []
                     
                     if not subcats_filtered:
                         subcats_filtered = ["General"]
@@ -330,8 +361,8 @@ else:
         # ------------ ADMIN: APPROVAL REQUESTS ------------
         elif admin_choice == "⚙️ Approval Requests":
             st.title("⚙️ Pending Customer Approvals")
-            if not users_df.empty:
-                pending_users = users_df[users_df['is_approved'].astype(int) == 0]
+            if not users_df.empty and 'is_approved' in users_df.columns:
+                pending_users = users_df[users_df['is_approved'].fillna(0).astype(int) == 0]
                 if not pending_users.empty:
                     for idx, row in pending_users.iterrows():
                         col_a, col_b = st.columns([3, 1])
@@ -340,11 +371,13 @@ else:
                         with col_b:
                             if st.button(f"Approve {row['username']}", key=f"app_{row['id']}"):
                                 users_df.loc[users_df['id'] == row['id'], 'is_approved'] = 1
-                                save_sheet("Users", users_df)
+                                save_sheet("users", users_df)
                                 st.success("Approved!")
                                 st.rerun()
                 else:
                     st.info("कोई पेंडिंग रिक्वेस्ट नहीं है।")
+            else:
+                st.info("कोई डेटा उपलब्ध नहीं है।")
 
         # ------------ ADMIN: MANAGE ORDERS ------------
         elif admin_choice == "📦 Manage Orders":
@@ -365,20 +398,20 @@ else:
 
         # ------------ SHOP PRODUCTS TAB ------------
         with cust_tab1:
-            categories = categories_df['category_name'].tolist() if not categories_df.empty else []
+            categories = categories_df['category_name'].tolist() if not categories_df.empty and 'category_name' in categories_df.columns else []
             
             if categories:
                 selected_cat = st.selectbox("📂 Category चुनें:", categories)
                 
-                if not services_df.empty:
-                    filtered_items = services_df[(services_df['category'] == selected_cat) & (services_df['is_active'].astype(int) == 1)]
+                if not services_df.empty and 'category' in services_df.columns:
+                    filtered_items = services_df[(services_df['category'] == selected_cat) & (services_df['is_active'].fillna(1).astype(int) == 1)]
                     
                     if not filtered_items.empty:
                         for idx, item in filtered_items.iterrows():
                             col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
                             with col1:
                                 st.markdown(f"**{item['service_name']}**")
-                                st.caption(f"Category: {item['sub_category']}")
+                                st.caption(f"Category: {item.get('sub_category', '')}")
                             with col2:
                                 st.write(f"₹ {item['price_rate']} / {item['unit']}")
                             with col3:
@@ -448,7 +481,7 @@ else:
         # ------------ ORDER HISTORY TAB ------------
         with cust_tab3:
             st.subheader("📜 आपके पुराने ऑर्डर")
-            if not orders_df.empty:
+            if not orders_df.empty and 'username' in orders_df.columns:
                 my_orders = orders_df[orders_df['username'].astype(str) == st.session_state['user_info']['username']]
                 if not my_orders.empty:
                     st.dataframe(my_orders, use_container_width=True)
